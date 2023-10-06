@@ -216,6 +216,7 @@ enum AssetSubClass {
   PRECIOUS_METAL
   PRIVATE_EQUITY
   STOCK
+  OPTION
 }
 
 enum DataSource {
