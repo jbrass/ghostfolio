@@ -4,12 +4,11 @@ import { Subject } from 'rxjs';
 @Component({
   selector: 'gf-changelog-page',
   styleUrls: ['./changelog-page.scss'],
-  templateUrl: './changelog-page.html'
+  templateUrl: './changelog-page.html',
+  standalone: false
 })
 export class ChangelogPageComponent implements OnDestroy {
   private unsubscribeSubject = new Subject<void>();
-
-  public constructor() {}
 
   public ngOnDestroy() {
     this.unsubscribeSubject.next();

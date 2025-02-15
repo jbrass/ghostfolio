@@ -1,11 +1,19 @@
+import { OrderService } from '@ghostfolio/api/app/order/order.service';
+import { LogPerformance } from '@ghostfolio/api/interceptors/performance-logging/performance-logging.interceptor';
 import { DataProviderService } from '@ghostfolio/api/services/data-provider/data-provider.service';
-import { ExchangeRateDataService } from '@ghostfolio/api/services/exchange-rate-data/exchange-rate-data.service';
 import { MarketDataService } from '@ghostfolio/api/services/market-data/market-data.service';
 import { resetHours } from '@ghostfolio/common/helper';
-import { DataProviderInfo, ResponseError } from '@ghostfolio/common/interfaces';
-import { Injectable } from '@nestjs/common';
+import {
+  AssetProfileIdentifier,
+  DataProviderInfo,
+  ResponseError
+} from '@ghostfolio/common/interfaces';
+import type { RequestWithUser } from '@ghostfolio/common/types';
+
+import { Inject, Injectable } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import { isBefore, isToday } from 'date-fns';
-import { flatten, isEmpty, uniqBy } from 'lodash';
+import { isEmpty, uniqBy } from 'lodash';
 
 import { GetValueObject } from './interfaces/get-value-object.interface';
 import { GetValuesObject } from './interfaces/get-values-object.interface';
@@ -15,18 +23,20 @@ import { GetValuesParams } from './interfaces/get-values-params.interface';
 export class CurrentRateService {
   public constructor(
     private readonly dataProviderService: DataProviderService,
-    private readonly exchangeRateDataService: ExchangeRateDataService,
-    private readonly marketDataService: MarketDataService
+    private readonly marketDataService: MarketDataService,
+    private readonly orderService: OrderService,
+    @Inject(REQUEST) private readonly request: RequestWithUser
   ) {}
 
+  @LogPerformance
+  // TODO: Pass user instead of using this.request.user
   public async getValues({
-    currencies,
     dataGatheringItems,
-    dateQuery,
-    userCurrency
+    dateQuery
   }: GetValuesParams): Promise<GetValuesObject> {
     const dataProviderInfos: DataProviderInfo[] = [];
-    const includeToday =
+
+    const includesToday =
       (!dateQuery.lt || isBefore(new Date(), dateQuery.lt)) &&
       (!dateQuery.gte || isBefore(dateQuery.gte, new Date())) &&
       (!dateQuery.in || this.containsToday(dateQuery.in));
@@ -35,37 +45,31 @@ export class CurrentRateService {
     const quoteErrors: ResponseError['errors'] = [];
     const today = resetHours(new Date());
 
-    if (includeToday) {
+    if (includesToday) {
       promises.push(
         this.dataProviderService
-          .getQuotes({ items: dataGatheringItems })
+          .getQuotes({ items: dataGatheringItems, user: this.request?.user })
           .then((dataResultProvider) => {
             const result: GetValueObject[] = [];
-            for (const dataGatheringItem of dataGatheringItems) {
-              if (
-                dataResultProvider?.[dataGatheringItem.symbol]?.dataProviderInfo
-              ) {
+
+            for (const { dataSource, symbol } of dataGatheringItems) {
+              if (dataResultProvider?.[symbol]?.dataProviderInfo) {
                 dataProviderInfos.push(
-                  dataResultProvider[dataGatheringItem.symbol].dataProviderInfo
+                  dataResultProvider[symbol].dataProviderInfo
                 );
               }
 
-              if (dataResultProvider?.[dataGatheringItem.symbol]?.marketPrice) {
+              if (dataResultProvider?.[symbol]?.marketPrice) {
                 result.push({
+                  dataSource,
+                  symbol,
                   date: today,
-                  marketPriceInBaseCurrency:
-                    this.exchangeRateDataService.toCurrency(
-                      dataResultProvider?.[dataGatheringItem.symbol]
-                        ?.marketPrice,
-                      dataResultProvider?.[dataGatheringItem.symbol]?.currency,
-                      userCurrency
-                    ),
-                  symbol: dataGatheringItem.symbol
+                  marketPrice: dataResultProvider?.[symbol]?.marketPrice
                 });
               } else {
                 quoteErrors.push({
-                  dataSource: dataGatheringItem.dataSource,
-                  symbol: dataGatheringItem.symbol
+                  dataSource,
+                  symbol
                 });
               }
             }
@@ -75,33 +79,32 @@ export class CurrentRateService {
       );
     }
 
-    const symbols = dataGatheringItems.map((dataGatheringItem) => {
-      return dataGatheringItem.symbol;
-    });
+    const assetProfileIdentifiers: AssetProfileIdentifier[] =
+      dataGatheringItems.map(({ dataSource, symbol }) => {
+        return { dataSource, symbol };
+      });
 
     promises.push(
       this.marketDataService
         .getRange({
-          dateQuery,
-          symbols
+          assetProfileIdentifiers,
+          dateQuery
         })
         .then((data) => {
-          return data.map((marketDataItem) => {
+          return data.map(({ dataSource, date, marketPrice, symbol }) => {
             return {
-              date: marketDataItem.date,
-              marketPriceInBaseCurrency:
-                this.exchangeRateDataService.toCurrency(
-                  marketDataItem.marketPrice,
-                  currencies[marketDataItem.symbol],
-                  userCurrency
-                ),
-              symbol: marketDataItem.symbol
+              dataSource,
+              date,
+              marketPrice,
+              symbol
             };
           });
         })
     );
 
-    const values = flatten(await Promise.all(promises));
+    const values = await Promise.all(promises).then((array) => {
+      return array.flat();
+    });
 
     const response: GetValuesObject = {
       dataProviderInfos,
@@ -112,7 +115,7 @@ export class CurrentRateService {
     };
 
     if (!isEmpty(quoteErrors)) {
-      for (const { symbol } of quoteErrors) {
+      for (const { dataSource, symbol } of quoteErrors) {
         try {
           // If missing quote, fallback to the latest available historical market price
           let value: GetValueObject = response.values.find((currentValue) => {
@@ -120,10 +123,17 @@ export class CurrentRateService {
           });
 
           if (!value) {
+            // Fallback to unit price of latest activity
+            const latestActivity = await this.orderService.getLatestOrder({
+              dataSource,
+              symbol
+            });
+
             value = {
+              dataSource,
               symbol,
               date: today,
-              marketPriceInBaseCurrency: 0
+              marketPrice: latestActivity?.unitPrice ?? 0
             };
 
             response.values.push(value);
@@ -131,10 +141,7 @@ export class CurrentRateService {
 
           const [latestValue] = response.values
             .filter((currentValue) => {
-              return (
-                currentValue.symbol === symbol &&
-                currentValue.marketPriceInBaseCurrency
-              );
+              return currentValue.symbol === symbol && currentValue.marketPrice;
             })
             .sort((a, b) => {
               if (a.date < b.date) {
@@ -148,8 +155,7 @@ export class CurrentRateService {
               return 0;
             });
 
-          value.marketPriceInBaseCurrency =
-            latestValue.marketPriceInBaseCurrency;
+          value.marketPrice = latestValue.marketPrice;
         } catch {}
       }
     }

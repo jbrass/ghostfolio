@@ -1,4 +1,5 @@
-import { TransformDataSourceInRequestInterceptor } from '@ghostfolio/api/interceptors/transform-data-source-in-request.interceptor';
+import { TransformDataSourceInRequestInterceptor } from '@ghostfolio/api/interceptors/transform-data-source-in-request/transform-data-source-in-request.interceptor';
+
 import {
   Controller,
   Get,
@@ -25,12 +26,13 @@ export class LogoController {
     @Res() response: Response
   ) {
     try {
-      const buffer = await this.logoService.getLogoByDataSourceAndSymbol({
-        dataSource,
-        symbol
-      });
+      const { buffer, type } =
+        await this.logoService.getLogoByDataSourceAndSymbol({
+          dataSource,
+          symbol
+        });
 
-      response.contentType('image/png');
+      response.contentType(type);
       response.send(buffer);
     } catch {
       response.status(HttpStatus.NOT_FOUND).send();
@@ -43,9 +45,9 @@ export class LogoController {
     @Res() response: Response
   ) {
     try {
-      const buffer = await this.logoService.getLogoByUrl(url);
+      const { buffer, type } = await this.logoService.getLogoByUrl(url);
 
-      response.contentType('image/png');
+      response.contentType(type);
       response.send(buffer);
     } catch {
       response.status(HttpStatus.NOT_FOUND).send();

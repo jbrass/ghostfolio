@@ -1,21 +1,32 @@
 import { UserWithSettings } from '@ghostfolio/common/types';
+
 import { Role } from '@prisma/client';
 
 export const permissions = {
   accessAdminControl: 'accessAdminControl',
+  accessAssistant: 'accessAssistant',
+  accessHoldingsChart: 'accessHoldingsChart',
   createAccess: 'createAccess',
   createAccount: 'createAccount',
+  createAccountBalance: 'createAccountBalance',
+  createApiKey: 'createApiKey',
+  createMarketData: 'createMarketData',
+  createMarketDataOfOwnAssetProfile: 'createMarketDataOfOwnAssetProfile',
   createOrder: 'createOrder',
+  createOwnTag: 'createOwnTag',
   createPlatform: 'createPlatform',
   createTag: 'createTag',
   createUserAccount: 'createUserAccount',
   deleteAccess: 'deleteAccess',
   deleteAccount: 'deleteAcccount',
+  deleteAccountBalance: 'deleteAcccountBalance',
   deleteAuthDevice: 'deleteAuthDevice',
   deleteOrder: 'deleteOrder',
+  deleteOwnUser: 'deleteOwnUser',
   deletePlatform: 'deletePlatform',
   deleteTag: 'deleteTag',
   deleteUser: 'deleteUser',
+  enableDataProviderGhostfolio: 'enableDataProviderGhostfolio',
   enableFearAndGreedIndex: 'enableFearAndGreedIndex',
   enableImport: 'enableImport',
   enableBlog: 'enableBlog',
@@ -25,36 +36,58 @@ export const permissions = {
   enableSubscriptionInterstitial: 'enableSubscriptionInterstitial',
   enableSystemMessage: 'enableSystemMessage',
   impersonateAllUsers: 'impersonateAllUsers',
+  readAiPrompt: 'readAiPrompt',
+  readMarketData: 'readMarketData',
+  readMarketDataOfOwnAssetProfile: 'readMarketDataOfOwnAssetProfile',
+  readPlatforms: 'readPlatforms',
+  readTags: 'readTags',
   reportDataGlitch: 'reportDataGlitch',
   toggleReadOnlyMode: 'toggleReadOnlyMode',
   updateAccount: 'updateAccount',
   updateAuthDevice: 'updateAuthDevice',
+  updateMarketData: 'updateMarketData',
+  updateMarketDataOfOwnAssetProfile: 'updateMarketDataOfOwnAssetProfile',
   updateOrder: 'updateOrder',
   updatePlatform: 'updatePlatform',
   updateTag: 'updateTag',
   updateUserSettings: 'updateUserSettings',
   updateViewMode: 'updateViewMode'
-};
+} as const;
 
 export function getPermissions(aRole: Role): string[] {
   switch (aRole) {
     case 'ADMIN':
       return [
         permissions.accessAdminControl,
+        permissions.accessAssistant,
+        permissions.accessHoldingsChart,
         permissions.createAccess,
         permissions.createAccount,
+        permissions.createAccountBalance,
+        permissions.deleteAccountBalance,
+        permissions.createMarketData,
+        permissions.createMarketDataOfOwnAssetProfile,
         permissions.createOrder,
+        permissions.createOwnTag,
         permissions.createPlatform,
         permissions.createTag,
         permissions.deleteAccess,
         permissions.deleteAccount,
         permissions.deleteAuthDevice,
         permissions.deleteOrder,
+        permissions.deleteOwnUser,
         permissions.deletePlatform,
         permissions.deleteTag,
         permissions.deleteUser,
+        permissions.readAiPrompt,
+        permissions.readMarketData,
+        permissions.readMarketDataOfOwnAssetProfile,
+        permissions.readPlatforms,
+        permissions.readTags,
         permissions.updateAccount,
         permissions.updateAuthDevice,
+        permissions.updateMarketData,
+        permissions.updateMarketDataOfOwnAssetProfile,
         permissions.updateOrder,
         permissions.updatePlatform,
         permissions.updateTag,
@@ -63,19 +96,34 @@ export function getPermissions(aRole: Role): string[] {
       ];
 
     case 'DEMO':
-      return [permissions.createUserAccount];
+      return [
+        permissions.accessAssistant,
+        permissions.accessHoldingsChart,
+        permissions.createUserAccount,
+        permissions.readAiPrompt
+      ];
 
     case 'USER':
       return [
+        permissions.accessAssistant,
+        permissions.accessHoldingsChart,
         permissions.createAccess,
         permissions.createAccount,
+        permissions.createAccountBalance,
+        permissions.createMarketDataOfOwnAssetProfile,
         permissions.createOrder,
+        permissions.createOwnTag,
         permissions.deleteAccess,
         permissions.deleteAccount,
+        permissions.deleteAccountBalance,
         permissions.deleteAuthDevice,
         permissions.deleteOrder,
+        permissions.deleteOwnUser,
+        permissions.readAiPrompt,
+        permissions.readMarketDataOfOwnAssetProfile,
         permissions.updateAccount,
         permissions.updateAuthDevice,
+        permissions.updateMarketDataOfOwnAssetProfile,
         permissions.updateOrder,
         permissions.updateUserSettings,
         permissions.updateViewMode
@@ -115,6 +163,28 @@ export function hasPermission(
   return aPermissions.includes(aPermission);
 }
 
-export function hasRole(aUser: UserWithSettings, aRole: Role): boolean {
+export function hasReadRestrictedAccessPermission({
+  impersonationId,
+  user
+}: {
+  impersonationId: string;
+  user: UserWithSettings;
+}) {
+  if (!impersonationId) {
+    return false;
+  }
+
+  const access = user.Access?.find(({ id }) => {
+    return id === impersonationId;
+  });
+
+  return access?.permissions?.includes('READ_RESTRICTED') ?? true;
+}
+
+export function hasRole(aUser: UserWithSettings, aRole: Role) {
   return aUser?.role === aRole;
+}
+
+export function isRestrictedView(aUser: UserWithSettings) {
+  return aUser.Settings.settings.isRestrictedView ?? false;
 }

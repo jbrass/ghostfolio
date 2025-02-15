@@ -1,10 +1,12 @@
+import { GfMembershipCardComponent } from '@ghostfolio/ui/membership-card';
+import { GfPremiumIndicatorComponent } from '@ghostfolio/ui/premium-indicator';
+import { GfValueComponent } from '@ghostfolio/ui/value';
+
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { RouterModule } from '@angular/router';
-import { GfPremiumIndicatorModule } from '@ghostfolio/ui/premium-indicator';
-import { GfValueModule } from '@ghostfolio/ui/value';
 
 import { UserAccountMembershipComponent } from './user-account-membership.component';
 
@@ -13,8 +15,9 @@ import { UserAccountMembershipComponent } from './user-account-membership.compon
   exports: [UserAccountMembershipComponent],
   imports: [
     CommonModule,
-    GfPremiumIndicatorModule,
-    GfValueModule,
+    GfMembershipCardComponent,
+    GfPremiumIndicatorComponent,
+    GfValueComponent,
     MatButtonModule,
     MatCardModule,
     RouterModule

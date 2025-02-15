@@ -1,17 +1,19 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
 import {
-  STAY_SIGNED_IN,
+  KEY_STAY_SIGNED_IN,
   SettingsStorageService
 } from '@ghostfolio/client/services/settings-storage.service';
 import { TokenStorageService } from '@ghostfolio/client/services/token-storage.service';
+
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
 @Component({
   selector: 'gf-auth-page',
   templateUrl: './auth-page.html',
-  styleUrls: ['./auth-page.scss']
+  styleUrls: ['./auth-page.scss'],
+  standalone: false
 })
 export class AuthPageComponent implements OnDestroy, OnInit {
   private unsubscribeSubject = new Subject<void>();
@@ -31,7 +33,7 @@ export class AuthPageComponent implements OnDestroy, OnInit {
 
         this.tokenStorageService.saveToken(
           jwt,
-          this.settingsStorageService.getSetting(STAY_SIGNED_IN) === 'true'
+          this.settingsStorageService.getSetting(KEY_STAY_SIGNED_IN) === 'true'
         );
 
         this.router.navigate(['/']);

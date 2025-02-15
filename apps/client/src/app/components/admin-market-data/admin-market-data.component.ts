@@ -1,3 +1,22 @@
+import { AdminService } from '@ghostfolio/client/services/admin.service';
+import { DataService } from '@ghostfolio/client/services/data.service';
+import { UserService } from '@ghostfolio/client/services/user/user.service';
+import {
+  DEFAULT_PAGE_SIZE,
+  ghostfolioScraperApiSymbolPrefix
+} from '@ghostfolio/common/config';
+import { getDateFormatString } from '@ghostfolio/common/helper';
+import {
+  AssetProfileIdentifier,
+  Filter,
+  InfoItem,
+  User
+} from '@ghostfolio/common/interfaces';
+import { AdminMarketDataItem } from '@ghostfolio/common/interfaces/admin-market-data.interface';
+import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+import { translate } from '@ghostfolio/ui/i18n';
+
+import { SelectionModel } from '@angular/cdk/collections';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -9,21 +28,16 @@ import {
 } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatPaginator, PageEvent } from '@angular/material/paginator';
-import { MatSort, Sort } from '@angular/material/sort';
+import { MatSort, Sort, SortDirection } from '@angular/material/sort';
 import { MatTableDataSource } from '@angular/material/table';
 import { ActivatedRoute, Router } from '@angular/router';
-import { AdminService } from '@ghostfolio/client/services/admin.service';
-import { UserService } from '@ghostfolio/client/services/user/user.service';
-import { DEFAULT_PAGE_SIZE } from '@ghostfolio/common/config';
-import { getDateFormatString } from '@ghostfolio/common/helper';
-import { Filter, UniqueAsset, User } from '@ghostfolio/common/interfaces';
-import { AdminMarketDataItem } from '@ghostfolio/common/interfaces/admin-market-data.interface';
-import { translate } from '@ghostfolio/ui/i18n';
-import { AssetSubClass, DataSource, Prisma } from '@prisma/client';
+import { AssetSubClass, DataSource, SymbolProfile } from '@prisma/client';
+import { isUUID } from 'class-validator';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject } from 'rxjs';
 import { distinctUntilChanged, switchMap, takeUntil } from 'rxjs/operators';
 
+import { AdminMarketDataService } from './admin-market-data.service';
 import { AssetProfileDialog } from './asset-profile-dialog/asset-profile-dialog.component';
 import { AssetProfileDialogParams } from './asset-profile-dialog/interfaces/interfaces';
 import { CreateAssetProfileDialog } from './create-asset-profile-dialog/create-asset-profile-dialog.component';
@@ -31,9 +45,11 @@ import { CreateAssetProfileDialogParams } from './create-asset-profile-dialog/in
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { class: 'has-fab' },
   selector: 'gf-admin-market-data',
   styleUrls: ['./admin-market-data.scss'],
-  templateUrl: './admin-market-data.html'
+  templateUrl: './admin-market-data.html',
+  standalone: false
 })
 export class AdminMarketDataComponent
   implements AfterViewInit, OnDestroy, OnInit
@@ -56,63 +72,91 @@ export class AdminMarketDataComponent
       return {
         id: assetSubClass.toString(),
         label: translate(assetSubClass),
-        type: <Filter['type']>'ASSET_SUB_CLASS'
+        type: 'ASSET_SUB_CLASS' as Filter['type']
       };
     })
     .concat([
       {
+        id: 'BENCHMARKS',
+        label: $localize`Benchmarks`,
+        type: 'PRESET_ID' as Filter['type']
+      },
+      {
         id: 'CURRENCIES',
         label: $localize`Currencies`,
-        type: <Filter['type']>'PRESET_ID'
+        type: 'PRESET_ID' as Filter['type']
       },
       {
         id: 'ETF_WITHOUT_COUNTRIES',
         label: $localize`ETFs without Countries`,
-        type: <Filter['type']>'PRESET_ID'
+        type: 'PRESET_ID' as Filter['type']
       },
       {
         id: 'ETF_WITHOUT_SECTORS',
         label: $localize`ETFs without Sectors`,
-        type: <Filter['type']>'PRESET_ID'
+        type: 'PRESET_ID' as Filter['type']
       }
     ]);
+  public benchmarks: Partial<SymbolProfile>[];
   public currentDataSource: DataSource;
   public currentSymbol: string;
-  public dataSource: MatTableDataSource<AdminMarketDataItem> =
-    new MatTableDataSource();
+  public dataSource = new MatTableDataSource<AdminMarketDataItem>();
   public defaultDateFormat: string;
   public deviceType: string;
-  public displayedColumns = [
-    'symbol',
-    'dataSource',
-    'assetClass',
-    'assetSubClass',
-    'date',
-    'activitiesCount',
-    'marketDataItemCount',
-    'sectorsCount',
-    'countriesCount',
-    'comment',
-    'actions'
-  ];
+  public displayedColumns: string[] = [];
   public filters$ = new Subject<Filter[]>();
+  public ghostfolioScraperApiSymbolPrefix = ghostfolioScraperApiSymbolPrefix;
+  public hasPermissionForSubscription: boolean;
+  public info: InfoItem;
   public isLoading = false;
+  public isUUID = isUUID;
   public placeholder = '';
   public pageSize = DEFAULT_PAGE_SIZE;
+  public selection: SelectionModel<Partial<SymbolProfile>>;
   public totalItems = 0;
   public user: User;
 
   private unsubscribeSubject = new Subject<void>();
 
   public constructor(
+    public adminMarketDataService: AdminMarketDataService,
     private adminService: AdminService,
     private changeDetectorRef: ChangeDetectorRef,
+    private dataService: DataService,
     private deviceService: DeviceDetectorService,
     private dialog: MatDialog,
     private route: ActivatedRoute,
     private router: Router,
     private userService: UserService
   ) {
+    this.info = this.dataService.fetchInfo();
+
+    this.hasPermissionForSubscription = hasPermission(
+      this.info?.globalPermissions,
+      permissions.enableSubscription
+    );
+
+    this.displayedColumns = [
+      'select',
+      'nameWithSymbol',
+      'dataSource',
+      'assetClass',
+      'assetSubClass',
+      'lastMarketPrice',
+      'date',
+      'activitiesCount',
+      'marketDataItemCount',
+      'sectorsCount',
+      'countriesCount'
+    ];
+
+    if (this.hasPermissionForSubscription) {
+      this.displayedColumns.push('isUsedByUsersWithSubscription');
+    }
+
+    this.displayedColumns.push('comment');
+    this.displayedColumns.push('actions');
+
     this.route.queryParams
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe((params) => {
@@ -158,7 +202,7 @@ export class AdminMarketDataComponent
 
         this.loadData({
           sortColumn,
-          sortDirection: <Prisma.SortOrder>direction,
+          sortDirection: direction,
           pageIndex: this.paginator.pageIndex
         });
       }
@@ -166,22 +210,32 @@ export class AdminMarketDataComponent
   }
 
   public ngOnInit() {
+    const { benchmarks } = this.dataService.fetchInfo();
+
+    this.benchmarks = benchmarks;
     this.deviceType = this.deviceService.getDeviceInfo().deviceType;
+
+    this.selection = new SelectionModel(true);
   }
 
   public onChangePage(page: PageEvent) {
     this.loadData({
       pageIndex: page.pageIndex,
       sortColumn: this.sort.active,
-      sortDirection: <Prisma.SortOrder>this.sort.direction
+      sortDirection: this.sort.direction
     });
   }
 
-  public onDeleteProfileData({ dataSource, symbol }: UniqueAsset) {
-    this.adminService
-      .deleteProfileData({ dataSource, symbol })
-      .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe(() => {});
+  public onDeleteAssetProfile({ dataSource, symbol }: AssetProfileIdentifier) {
+    this.adminMarketDataService.deleteAssetProfile({ dataSource, symbol });
+  }
+
+  public onDeleteAssetProfiles() {
+    this.adminMarketDataService.deleteAssetProfiles(
+      this.selection.selected.map(({ dataSource, symbol }) => {
+        return { dataSource, symbol };
+      })
+    );
   }
 
   public onGather7Days() {
@@ -210,24 +264,30 @@ export class AdminMarketDataComponent
     this.adminService
       .gatherProfileData()
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe(() => {});
+      .subscribe();
   }
 
-  public onGatherProfileDataBySymbol({ dataSource, symbol }: UniqueAsset) {
+  public onGatherProfileDataBySymbol({
+    dataSource,
+    symbol
+  }: AssetProfileIdentifier) {
     this.adminService
       .gatherProfileDataBySymbol({ dataSource, symbol })
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe(() => {});
+      .subscribe();
   }
 
-  public onGatherSymbol({ dataSource, symbol }: UniqueAsset) {
+  public onGatherSymbol({ dataSource, symbol }: AssetProfileIdentifier) {
     this.adminService
       .gatherSymbol({ dataSource, symbol })
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe(() => {});
+      .subscribe();
   }
 
-  public onOpenAssetProfileDialog({ dataSource, symbol }: UniqueAsset) {
+  public onOpenAssetProfileDialog({
+    dataSource,
+    symbol
+  }: AssetProfileIdentifier) {
     this.router.navigate([], {
       queryParams: {
         dataSource,
@@ -250,7 +310,7 @@ export class AdminMarketDataComponent
     }: {
       pageIndex: number;
       sortColumn?: string;
-      sortDirection?: Prisma.SortOrder;
+      sortDirection?: SortDirection;
     } = { pageIndex: 0 }
   ) {
     this.isLoading = true;
@@ -268,6 +328,8 @@ export class AdminMarketDataComponent
     this.placeholder =
       this.activeFilters.length <= 0 ? $localize`Filter by...` : '';
 
+    this.selection.clear();
+
     this.adminService
       .fetchAdminMarketData({
         sortColumn,
@@ -280,7 +342,16 @@ export class AdminMarketDataComponent
       .subscribe(({ count, marketData }) => {
         this.totalItems = count;
 
-        this.dataSource = new MatTableDataSource(marketData);
+        this.dataSource = new MatTableDataSource(
+          marketData.map((marketDataItem) => {
+            return {
+              ...marketDataItem,
+              isBenchmark: this.benchmarks.some(({ id }) => {
+                return id === marketDataItem.id;
+              })
+            };
+          })
+        );
         this.dataSource.sort = this.sort;
 
         this.isLoading = false;
@@ -304,13 +375,14 @@ export class AdminMarketDataComponent
 
         const dialogRef = this.dialog.open(AssetProfileDialog, {
           autoFocus: false,
-          data: <AssetProfileDialogParams>{
+          data: {
             dataSource,
             symbol,
+            colorScheme: this.user?.settings.colorScheme,
             deviceType: this.deviceType,
             locale: this.user?.settings?.locale
-          },
-          height: this.deviceType === 'mobile' ? '97.5vh' : '80vh',
+          } as AssetProfileDialogParams,
+          height: this.deviceType === 'mobile' ? '98vh' : '80vh',
           width: this.deviceType === 'mobile' ? '100vw' : '50rem'
         });
 
@@ -332,17 +404,17 @@ export class AdminMarketDataComponent
 
         const dialogRef = this.dialog.open(CreateAssetProfileDialog, {
           autoFocus: false,
-          data: <CreateAssetProfileDialogParams>{
+          data: {
             deviceType: this.deviceType,
             locale: this.user?.settings?.locale
-          },
+          } as CreateAssetProfileDialogParams,
           width: this.deviceType === 'mobile' ? '100vw' : '50rem'
         });
 
         dialogRef
           .afterClosed()
           .pipe(takeUntil(this.unsubscribeSubject))
-          .subscribe(({ dataSource, symbol }) => {
+          .subscribe(({ dataSource, symbol } = {}) => {
             if (dataSource && symbol) {
               this.adminService
                 .addAssetProfile({ dataSource, symbol })

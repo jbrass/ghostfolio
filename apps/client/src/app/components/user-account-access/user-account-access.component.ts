@@ -1,3 +1,9 @@
+import { CreateAccessDto } from '@ghostfolio/api/app/access/create-access.dto';
+import { DataService } from '@ghostfolio/client/services/data.service';
+import { UserService } from '@ghostfolio/client/services/user/user.service';
+import { Access, User } from '@ghostfolio/common/interfaces';
+import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -7,11 +13,6 @@ import {
 } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CreateAccessDto } from '@ghostfolio/api/app/access/create-access.dto';
-import { DataService } from '@ghostfolio/client/services/data.service';
-import { UserService } from '@ghostfolio/client/services/user/user.service';
-import { Access, User } from '@ghostfolio/common/interfaces';
-import { hasPermission, permissions } from '@ghostfolio/common/permissions';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -20,12 +21,15 @@ import { CreateOrUpdateAccessDialog } from './create-or-update-access-dialog/cre
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { class: 'has-fab' },
   selector: 'gf-user-account-access',
   styleUrls: ['./user-account-access.scss'],
-  templateUrl: './user-account-access.html'
+  templateUrl: './user-account-access.html',
+  standalone: false
 })
 export class UserAccountAccessComponent implements OnDestroy, OnInit {
-  public accesses: Access[];
+  public accessesGet: Access[];
+  public accessesGive: Access[];
   public deviceType: string;
   public hasPermissionToCreateAccess: boolean;
   public hasPermissionToDeleteAccess: boolean;
@@ -100,45 +104,44 @@ export class UserAccountAccessComponent implements OnDestroy, OnInit {
     this.unsubscribeSubject.complete();
   }
 
-  private openCreateAccessDialog(): void {
+  private openCreateAccessDialog() {
     const dialogRef = this.dialog.open(CreateOrUpdateAccessDialog, {
       data: {
         access: {
           alias: '',
-          type: 'PUBLIC'
+          permissions: ['READ_RESTRICTED'],
+          type: 'PRIVATE'
         }
       },
-      height: this.deviceType === 'mobile' ? '97.5vh' : '80vh',
+      height: this.deviceType === 'mobile' ? '98vh' : undefined,
       width: this.deviceType === 'mobile' ? '100vw' : '50rem'
     });
 
-    dialogRef
-      .afterClosed()
-      .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe((data: any) => {
-        const access: CreateAccessDto = data?.access;
+    dialogRef.afterClosed().subscribe((access: CreateAccessDto | null) => {
+      if (access) {
+        this.update();
+      }
 
-        if (access) {
-          this.dataService
-            .postAccess({ alias: access.alias })
-            .pipe(takeUntil(this.unsubscribeSubject))
-            .subscribe({
-              next: () => {
-                this.update();
-              }
-            });
-        }
-
-        this.router.navigate(['.'], { relativeTo: this.route });
-      });
+      this.router.navigate(['.'], { relativeTo: this.route });
+    });
   }
 
   private update() {
+    this.accessesGet = this.user.access.map(({ alias, id, permissions }) => {
+      return {
+        alias,
+        id,
+        permissions,
+        grantee: $localize`Me`,
+        type: 'PRIVATE'
+      };
+    });
+
     this.dataService
       .fetchAccesses()
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe((accesses) => {
-        this.accesses = accesses;
+        this.accessesGive = accesses;
 
         this.changeDetectorRef.markForCheck();
       });

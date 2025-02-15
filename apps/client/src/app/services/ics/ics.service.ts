@@ -1,6 +1,7 @@
-import { Injectable } from '@angular/core';
 import { capitalize } from '@ghostfolio/common/helper';
 import { Export } from '@ghostfolio/common/interfaces';
+
+import { Injectable } from '@angular/core';
 import { Type } from '@prisma/client';
 import { format, parseISO } from 'date-fns';
 
@@ -10,8 +11,6 @@ import { format, parseISO } from 'date-fns';
 export class IcsService {
   private readonly ICS_DATE_FORMAT = 'yyyyMMdd';
   private readonly ICS_LINE_BREAK = '\r\n';
-
-  public constructor() {}
 
   public transformActivitiesToIcsContent(
     aActivities: Export['activities']

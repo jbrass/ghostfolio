@@ -4,6 +4,12 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
     http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+  <!--
+    <url>
+      <loc>https://ghostfol.io/ca</loc>
+      <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+    </url>
+  -->
   <url>
     <loc>https://ghostfol.io/de</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
@@ -51,123 +57,19 @@
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
+    <loc>https://ghostfol.io/de/ressourcen/lexikon</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/de/ressourcen/maerkte</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
     <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-altoo</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-capmon</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-copilot-money</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-delta</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-divvydiary</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-exirio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-finary</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-folishare</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-getquin</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-gospatz</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-justetf</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-kubera</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-markets.sh</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-maybe-finance</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-monse</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-parqet</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-plannix</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-portfolio-dividend-tracker</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-portseido</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-projectionlab</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-seeking-alpha</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-sharesight</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-simple-portfolio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-snowball-analytics</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-stockle</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-stockmarketeye</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-sumio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-utluna</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/de/ressourcen/personal-finance-tools/open-source-alternative-zu-yeekatee</loc>
+    <loc>https://ghostfol.io/de/ressourcen/ratgeber</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
@@ -275,7 +177,31 @@
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
+    <loc>https://ghostfol.io/en/blog/2023/11/black-week-2023</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/en/blog/2023/11/hacktoberfest-2023-debriefing</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/en/blog/2024/09/hacktoberfest-2024</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/en/blog/2024/11/black-weeks-2024</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
     <loc>https://ghostfol.io/en/faq</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/en/saas</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/en/self-hosting</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
@@ -305,123 +231,19 @@
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
+    <loc>https://ghostfol.io/en/resources/glossary</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/en/resources/guides</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/en/resources/markets</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
     <loc>https://ghostfol.io/en/resources/personal-finance-tools</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-altoo</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-capmon</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-copilot-money</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-delta</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-divvydiary</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-exirio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-finary</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-folishare</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-getquin</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-gospatz</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-justetf</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-kubera</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-markets.sh</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-maybe-finance</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-monse</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-parqet</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-plannix</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-portfolio-dividend-tracker</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-portseido</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-projectionlab</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-seeking-alpha</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-sharesight</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-simple-portfolio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-snowball-analytics</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-stockle</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-stockmarketeye</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-sumio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-utluna</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/en/resources/personal-finance-tools/open-source-alternative-to-yeekatee</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
@@ -452,6 +274,10 @@
   </url>
   <url>
     <loc>https://ghostfol.io/es/recursos</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/es/recursos/personal-finance-tools</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
@@ -533,6 +359,10 @@
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
+    <loc>https://ghostfol.io/fr/ressources/personal-finance-tools</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
     <loc>https://ghostfol.io/it</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
@@ -591,122 +421,6 @@
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-altoo</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-campmon</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-copilot-money</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-delta</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-divvydiary</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-exirio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-finary</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-folishare</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-getquin</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-gospatz</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-justetf</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-kubera</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-markets.sh</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-maybe-finance</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-monse</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-parqet</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-plannix</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-portfolio-dividend-tracker</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-portseido</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-projectionlab</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-seeking-alpha</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-sharesight</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-simple-portfolio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-snowball-analytics</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-stockle</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-stockmarketeye</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-sumio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-utluna</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/it/risorse/personal-finance-tools/alternativa-open-source-a-yeekatee</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
     <loc>https://ghostfol.io/nl</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
@@ -716,122 +430,6 @@
   </url>
   <url>
     <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-altoo</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-capmon</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-copilot-money</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-delta</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-divvydiary</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-exirio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-finary</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-folishare</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-getquin</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-gospatz</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-justetf</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-kubera</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-markets.sh</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-maybe-finance</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-monse</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-parqet</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-plannix</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-portfolio-dividend-tracker</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-portseido</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-projectionlab</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-seeking-alpha</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-sharesight</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-simple-portfolio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-snowball-analytics</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-stockle</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-stockmarketeye</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-sumio</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-utluna</loc>
-    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
-  </url>
-  <url>
-    <loc>https://ghostfol.io/nl/bronnen/personal-finance-tools/open-source-alternatief-voor-yeekatee</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
@@ -881,6 +479,44 @@
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
+    <loc>https://ghostfol.io/pl</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/pl/blog</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/pl/cennik</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <!--
+    <url>
+      <loc>https://ghostfol.io/pl/faq</loc>
+      <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+    </url>
+  -->
+  <url>
+    <loc>https://ghostfol.io/pl/funkcje</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/pl/o-ghostfolio</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/pl/open</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/pl/rynki</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://ghostfol.io/pl/zarejestruj</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
     <loc>https://ghostfol.io/pt</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
@@ -913,6 +549,10 @@
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
   <url>
+    <loc>https://ghostfol.io/pt/recursos/personal-finance-tools</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  <url>
     <loc>https://ghostfol.io/pt/registo</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
@@ -940,4 +580,17 @@
     <loc>https://ghostfol.io/tr</loc>
     <lastmod>${currentDate}T00:00:00+00:00</lastmod>
   </url>
+  <!--
+  <url>
+    <loc>https://ghostfol.io/uk</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  -->
+  <!--
+  <url>
+    <loc>https://ghostfol.io/zh</loc>
+    <lastmod>${currentDate}T00:00:00+00:00</lastmod>
+  </url>
+  -->
+  ${personalFinanceTools}
 </urlset>

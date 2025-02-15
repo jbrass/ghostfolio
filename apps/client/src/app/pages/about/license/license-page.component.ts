@@ -4,12 +4,11 @@ import { Subject } from 'rxjs';
 @Component({
   selector: 'gf-license-page',
   styleUrls: ['./license-page.scss'],
-  templateUrl: './license-page.html'
+  templateUrl: './license-page.html',
+  standalone: false
 })
 export class LicensePageComponent implements OnDestroy {
   private unsubscribeSubject = new Subject<void>();
-
-  public constructor() {}
 
   public ngOnDestroy() {
     this.unsubscribeSubject.next();

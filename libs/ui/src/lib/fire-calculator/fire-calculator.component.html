@@ -31,10 +31,7 @@
         <mat-form-field appearance="outline" class="w-100">
           <mat-label i18n>Retirement Date</mat-label>
           <div>
-            {{
-              calculatorForm.controls['retirementDate'].value
-                | date: 'MMMM YYYY'
-            }}
+            {{ calculatorForm.get('retirementDate').value | date: 'MMMM YYYY' }}
           </div>
           <input
             class="d-none"
@@ -46,7 +43,7 @@
             matIconSuffix
             [disabled]="hasPermissionToUpdateUserSettings !== true"
             [for]="datepicker"
-          ></mat-datepicker-toggle>
+          />
           <mat-datepicker
             #datepicker
             startView="multi-year"
@@ -70,14 +67,15 @@
     </div>
     <div class="col-md-9 text-center">
       <div class="chart-container mb-4">
-        <ngx-skeleton-loader
-          *ngIf="isLoading"
-          animation="pulse"
-          [theme]="{
-            height: '100%',
-            width: '100%'
-          }"
-        ></ngx-skeleton-loader>
+        @if (isLoading) {
+          <ngx-skeleton-loader
+            animation="pulse"
+            [theme]="{
+              height: '100%',
+              width: '100%'
+            }"
+          />
+        }
         <canvas
           #chartCanvas
           class="h-100"

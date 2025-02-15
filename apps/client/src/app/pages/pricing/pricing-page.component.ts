@@ -1,9 +1,12 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { NotificationService } from '@ghostfolio/client/core/notification/notification.service';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
 import { User } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
 import { translate } from '@ghostfolio/ui/i18n';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { StringValue } from 'ms';
 import { StripeService } from 'ngx-stripe';
 import { Subject } from 'rxjs';
 import { catchError, switchMap, takeUntil } from 'rxjs/operators';
@@ -12,12 +15,14 @@ import { catchError, switchMap, takeUntil } from 'rxjs/operators';
   host: { class: 'page' },
   selector: 'gf-pricing-page',
   styleUrls: ['./pricing-page.scss'],
-  templateUrl: './pricing-page.html'
+  templateUrl: './pricing-page.html',
+  standalone: false
 })
 export class PricingPageComponent implements OnDestroy, OnInit {
   public baseCurrency: string;
   public coupon: number;
   public couponId: string;
+  public durationExtension: StringValue;
   public hasPermissionToUpdateUserSettings: boolean;
   public importAndExportTooltipBasic = translate(
     'DATA_IMPORT_AND_EXPORT_TOOLTIP_BASIC'
@@ -29,10 +34,14 @@ export class PricingPageComponent implements OnDestroy, OnInit {
     'DATA_IMPORT_AND_EXPORT_TOOLTIP_PREMIUM'
   );
   public isLoggedIn: boolean;
+  public label: string;
   public price: number;
   public priceId: string;
-  public routerLinkFeatures = ['/' + $localize`features`];
-  public routerLinkRegister = ['/' + $localize`register`];
+  public professionalDataProviderTooltipPremium = translate(
+    'PROFESSIONAL_DATA_PROVIDER_TOOLTIP_PREMIUM'
+  );
+  public routerLinkFeatures = ['/' + $localize`:snake-case:features`];
+  public routerLinkRegister = ['/' + $localize`:snake-case:register`];
   public user: User;
 
   private unsubscribeSubject = new Subject<void>();
@@ -40,16 +49,19 @@ export class PricingPageComponent implements OnDestroy, OnInit {
   public constructor(
     private changeDetectorRef: ChangeDetectorRef,
     private dataService: DataService,
+    private notificationService: NotificationService,
     private stripeService: StripeService,
     private userService: UserService
   ) {}
 
   public ngOnInit() {
-    const { baseCurrency, subscriptions } = this.dataService.fetchInfo();
+    const { baseCurrency, subscriptionOffers } = this.dataService.fetchInfo();
     this.baseCurrency = baseCurrency;
 
-    this.coupon = subscriptions?.default?.coupon;
-    this.price = subscriptions?.default?.price;
+    this.coupon = subscriptionOffers?.default?.coupon;
+    this.durationExtension = subscriptionOffers?.default?.durationExtension;
+    this.label = subscriptionOffers?.default?.label;
+    this.price = subscriptionOffers?.default?.price;
 
     this.userService.stateChanged
       .pipe(takeUntil(this.unsubscribeSubject))
@@ -62,11 +74,20 @@ export class PricingPageComponent implements OnDestroy, OnInit {
             permissions.updateUserSettings
           );
 
-          this.coupon = subscriptions?.[this.user?.subscription?.offer]?.coupon;
+          this.coupon =
+            subscriptionOffers?.[this.user?.subscription?.offer]?.coupon;
           this.couponId =
-            subscriptions?.[this.user.subscription.offer]?.couponId;
-          this.price = subscriptions?.[this.user?.subscription?.offer]?.price;
-          this.priceId = subscriptions?.[this.user.subscription.offer]?.priceId;
+            subscriptionOffers?.[this.user.subscription.offer]?.couponId;
+          this.durationExtension =
+            subscriptionOffers?.[
+              this.user?.subscription?.offer
+            ]?.durationExtension;
+          this.label =
+            subscriptionOffers?.[this.user?.subscription?.offer]?.label;
+          this.price =
+            subscriptionOffers?.[this.user?.subscription?.offer]?.price;
+          this.priceId =
+            subscriptionOffers?.[this.user.subscription.offer]?.priceId;
 
           this.changeDetectorRef.markForCheck();
         }
@@ -81,13 +102,18 @@ export class PricingPageComponent implements OnDestroy, OnInit {
           return this.stripeService.redirectToCheckout({ sessionId });
         }),
         catchError((error) => {
-          alert(error.message);
+          this.notificationService.alert({
+            title: error.message
+          });
+
           throw error;
         })
       )
       .subscribe((result) => {
         if (result.error) {
-          alert(result.error.message);
+          this.notificationService.alert({
+            title: result.error.message
+          });
         }
       });
   }

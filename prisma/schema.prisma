@@ -1,7 +1,7 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = []
-  binaryTargets   = ["debian-openssl-1.1.x", "linux-arm64-openssl-3.0.x", "native"]
+  binaryTargets   = ["debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x", "native"]
 }
 
 datasource db {
@@ -11,34 +11,42 @@ datasource db {
 
 model Access {
   alias         String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime           @default(now())
   granteeUserId String?
-  id            String   @id @default(uuid())
-  updatedAt     DateTime @updatedAt
+  id            String             @id @default(uuid())
+  permissions   AccessPermission[] @default([READ_RESTRICTED])
+  updatedAt     DateTime           @updatedAt
   userId        String
-  GranteeUser   User?    @relation("accessGet", fields: [granteeUserId], references: [id])
-  User          User     @relation("accessGive", fields: [userId], references: [id])
+  GranteeUser   User?              @relation("accessGet", fields: [granteeUserId], onDelete: Cascade, references: [id])
+  User          User               @relation("accessGive", fields: [userId], onDelete: Cascade, references: [id])
+
+  @@index([alias])
+  @@index([granteeUserId])
+  @@index([userId])
 }
 
 model Account {
-  accountType AccountType?
-  balance     Float            @default(0)
-  balances    AccountBalance[]
-  comment     String?
-  createdAt   DateTime         @default(now())
-  currency    String?
-  id          String           @default(uuid())
-  isDefault   Boolean          @default(false)
-  isExcluded  Boolean          @default(false)
-  name        String?
-  platformId  String?
-  updatedAt   DateTime         @updatedAt
-  userId      String
-  Platform    Platform?        @relation(fields: [platformId], references: [id])
-  User        User             @relation(fields: [userId], references: [id])
-  Order       Order[]
+  balance    Float            @default(0)
+  balances   AccountBalance[]
+  comment    String?
+  createdAt  DateTime         @default(now())
+  currency   String?
+  id         String           @default(uuid())
+  isExcluded Boolean          @default(false)
+  name       String?
+  platformId String?
+  updatedAt  DateTime         @updatedAt
+  userId     String
+  Platform   Platform?        @relation(fields: [platformId], references: [id])
+  User       User             @relation(fields: [userId], onDelete: Cascade, references: [id])
+  Order      Order[]
 
   @@id([id, userId])
+  @@index([currency])
+  @@index([id])
+  @@index([isExcluded])
+  @@index([name])
+  @@index([userId])
 }
 
 model AccountBalance {
@@ -50,14 +58,34 @@ model AccountBalance {
   userId    String
   value     Float
   Account   Account  @relation(fields: [accountId, userId], onDelete: Cascade, references: [id, userId])
+
+  @@unique([accountId, date])
+  @@index([accountId])
+  @@index([date])
 }
 
 model Analytics {
-  activityCount Int      @default(0)
-  country       String?
-  updatedAt     DateTime @updatedAt
-  userId        String   @id
-  User          User     @relation(fields: [userId], references: [id])
+  activityCount                       Int      @default(0)
+  country                             String?
+  dataProviderGhostfolioDailyRequests Int      @default(0)
+  lastRequestAt                       DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  userId                              String   @id
+  User                                User     @relation(fields: [userId], onDelete: Cascade, references: [id])
+
+  @@index([lastRequestAt])
+  @@index([updatedAt])
+}
+
+model ApiKey {
+  createdAt DateTime @default(now())
+  hashedKey String   @unique
+  id        String   @id @default(uuid())
+  updatedAt DateTime @updatedAt
+  userId    String
+  user      User     @relation(fields: [userId], onDelete: Cascade, references: [id])
+
+  @@index([userId])
 }
 
 model AuthDevice {
@@ -68,7 +96,9 @@ model AuthDevice {
   id                  String   @id @default(uuid())
   updatedAt           DateTime @updatedAt
   userId              String
-  User                User     @relation(fields: [userId], references: [id])
+  User                User     @relation(fields: [userId], onDelete: Cascade, references: [id])
+
+  @@index([userId])
 }
 
 model MarketData {
@@ -81,6 +111,11 @@ model MarketData {
   symbol      String
 
   @@unique([dataSource, date, symbol])
+  @@index([dataSource])
+  @@index([dataSource, symbol])
+  @@index([date])
+  @@index([marketPrice])
+  @@index([state])
   @@index([symbol])
 }
 
@@ -89,6 +124,7 @@ model Order {
   accountUserId   String?
   comment         String?
   createdAt       DateTime      @default(now())
+  currency        String?
   date            DateTime
   fee             Float
   id              String        @id @default(uuid())
@@ -101,8 +137,13 @@ model Order {
   userId          String
   Account         Account?      @relation(fields: [accountId, accountUserId], references: [id, userId])
   SymbolProfile   SymbolProfile @relation(fields: [symbolProfileId], references: [id])
-  User            User          @relation(fields: [userId], references: [id])
+  User            User          @relation(fields: [userId], onDelete: Cascade, references: [id])
   tags            Tag[]
+
+  @@index([accountId])
+  @@index([date])
+  @@index([isDraft])
+  @@index([userId])
 }
 
 model Platform {
@@ -110,6 +151,8 @@ model Platform {
   name    String?
   url     String    @unique
   Account Account[]
+
+  @@index([name])
 }
 
 model Property {
@@ -121,7 +164,7 @@ model Settings {
   settings  Json?
   updatedAt DateTime @updatedAt
   userId    String   @id
-  User      User     @relation(fields: [userId], references: [id])
+  User      User     @relation(fields: [userId], onDelete: Cascade, references: [id])
 }
 
 model SymbolProfile {
@@ -132,6 +175,10 @@ model SymbolProfile {
   createdAt              DateTime                @default(now())
   currency               String
   dataSource             DataSource
+  figi                   String?
+  figiComposite          String?
+  figiShareClass         String?
+  holdings               Json?                   @default("[]")
   id                     String                  @id @default(uuid())
   isin                   String?
   name                   String?
@@ -141,22 +188,31 @@ model SymbolProfile {
   symbol                 String
   symbolMapping          Json?
   url                    String?
+  userId                 String?
   Order                  Order[]
   SymbolProfileOverrides SymbolProfileOverrides?
+  User                   User?                   @relation(fields: [userId], onDelete: Cascade, references: [id])
 
   @@unique([dataSource, symbol])
+  @@index([assetClass])
+  @@index([currency])
+  @@index([dataSource])
+  @@index([isin])
+  @@index([name])
+  @@index([symbol])
 }
 
 model SymbolProfileOverrides {
   assetClass      AssetClass?
   assetSubClass   AssetSubClass?
   countries       Json?          @default("[]")
+  holdings        Json?          @default("[]")
   name            String?
   sectors         Json?          @default("[]")
-  url             String?
   symbolProfileId String         @id
   updatedAt       DateTime       @updatedAt
-  SymbolProfile   SymbolProfile  @relation(fields: [symbolProfileId], references: [id])
+  url             String?
+  SymbolProfile   SymbolProfile  @relation(fields: [symbolProfileId], onDelete: Cascade, references: [id])
 }
 
 model Subscription {
@@ -166,49 +222,66 @@ model Subscription {
   price     Float?
   updatedAt DateTime @updatedAt
   userId    String
-  User      User     @relation(fields: [userId], references: [id])
+  User      User     @relation(fields: [userId], onDelete: Cascade, references: [id])
+
+  @@index([userId])
 }
 
 model Tag {
   id     String  @id @default(uuid())
-  name   String  @unique
+  name   String
   orders Order[]
+  userId String?
+  User   User?   @relation(fields: [userId], onDelete: Cascade, references: [id])
+
+  @@unique([name, userId])
+  @@index([name])
 }
 
 model User {
   accessToken   String?
   authChallenge String?
-  createdAt     DateTime       @default(now())
-  id            String         @id @default(uuid())
-  provider      Provider       @default(ANONYMOUS)
-  role          Role           @default(USER)
+  createdAt     DateTime        @default(now())
+  id            String          @id @default(uuid())
+  provider      Provider        @default(ANONYMOUS)
+  role          Role            @default(USER)
   thirdPartyId  String?
-  updatedAt     DateTime       @updatedAt
-  Access        Access[]       @relation("accessGet")
-  AccessGive    Access[]       @relation("accessGive")
+  updatedAt     DateTime        @updatedAt
+  Access        Access[]        @relation("accessGet")
+  AccessGive    Access[]        @relation("accessGive")
   Account       Account[]
   Analytics     Analytics?
+  ApiKey        ApiKey[]
   AuthDevice    AuthDevice[]
   Order         Order[]
   Settings      Settings?
   Subscription  Subscription[]
+  SymbolProfile SymbolProfile[]
+  Tag           Tag[]
+
+  @@index([accessToken])
+  @@index([createdAt])
+  @@index([provider])
+  @@index([role])
+  @@index([thirdPartyId])
 }
 
-enum AccountType {
-  CASH
-  SECURITIES
+enum AccessPermission {
+  READ
+  READ_RESTRICTED
 }
 
 enum AssetClass {
-  CASH
   COMMODITY
   EQUITY
   FIXED_INCOME
+  LIQUIDITY
   REAL_ESTATE
 }
 
 enum AssetSubClass {
   BOND
+  CASH
   COMMODITY
   CRYPTOCURRENCY
   ETF
@@ -224,6 +297,7 @@ enum DataSource {
   COINGECKO
   EOD_HISTORICAL_DATA
   FINANCIAL_MODELING_PREP
+  GHOSTFOLIO
   GOOGLE_SHEETS
   MANUAL
   RAPID_API
@@ -244,6 +318,7 @@ enum Provider {
 enum Role {
   ADMIN
   DEMO
+  INACTIVE
   USER
 }
 

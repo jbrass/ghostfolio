@@ -1,3 +1,8 @@
+import { DataService } from '@ghostfolio/client/services/data.service';
+import { TokenStorageService } from '@ghostfolio/client/services/token-storage.service';
+import { WebAuthnService } from '@ghostfolio/client/services/web-authn.service';
+import { InfoItem } from '@ghostfolio/common/interfaces';
+
 import {
   HTTP_INTERCEPTORS,
   HttpErrorResponse,
@@ -13,18 +18,13 @@ import {
   TextOnlySnackBar
 } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
-import { DataService } from '@ghostfolio/client/services/data.service';
-import { TokenStorageService } from '@ghostfolio/client/services/token-storage.service';
-import { WebAuthnService } from '@ghostfolio/client/services/web-authn.service';
-import { InfoItem } from '@ghostfolio/common/interfaces';
-import { hasPermission, permissions } from '@ghostfolio/common/permissions';
 import { StatusCodes } from 'http-status-codes';
+import ms from 'ms';
 import { Observable, throwError } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 
 @Injectable()
 export class HttpResponseInterceptor implements HttpInterceptor {
-  public hasPermissionForSubscription: boolean;
   public info: InfoItem;
   public snackBarRef: MatSnackBarRef<TextOnlySnackBar>;
 
@@ -36,11 +36,6 @@ export class HttpResponseInterceptor implements HttpInterceptor {
     private webAuthnService: WebAuthnService
   ) {
     this.info = this.dataService.fetchInfo();
-
-    this.hasPermissionForSubscription = hasPermission(
-      this.info?.globalPermissions,
-      permissions.enableSubscription
-    );
   }
 
   public intercept(
@@ -60,15 +55,17 @@ export class HttpResponseInterceptor implements HttpInterceptor {
                   ' ' +
                   $localize`Please try again later.`,
                 undefined,
-                { duration: 6000 }
+                {
+                  duration: ms('6 seconds')
+                }
               );
-            } else if (!error.url.endsWith('auth/anonymous')) {
+            } else if (!error.url.includes('/auth')) {
               this.snackBarRef = this.snackBar.open(
-                $localize`This feature requires a subscription.`,
-                this.hasPermissionForSubscription
-                  ? $localize`Upgrade Plan`
-                  : undefined,
-                { duration: 6000 }
+                $localize`This action is not allowed.`,
+                undefined,
+                {
+                  duration: ms('6 seconds')
+                }
               );
             }
 
@@ -87,7 +84,9 @@ export class HttpResponseInterceptor implements HttpInterceptor {
                 ' ' +
                 $localize`Please try again later.`,
               $localize`Okay`,
-              { duration: 6000 }
+              {
+                duration: ms('6 seconds')
+              }
             );
 
             this.snackBarRef.afterDismissed().subscribe(() => {
@@ -98,10 +97,20 @@ export class HttpResponseInterceptor implements HttpInterceptor {
               window.location.reload();
             });
           }
+        } else if (error.status === StatusCodes.TOO_MANY_REQUESTS) {
+          if (!this.snackBarRef) {
+            this.snackBarRef = this.snackBar.open(
+              $localize`Oops! It looks like you’re making too many requests. Please slow down a bit.`
+            );
+
+            this.snackBarRef.afterDismissed().subscribe(() => {
+              this.snackBarRef = undefined;
+            });
+          }
         } else if (error.status === StatusCodes.UNAUTHORIZED) {
           if (this.webAuthnService.isEnabled()) {
             this.router.navigate(['/webauthn']);
-          } else {
+          } else if (!error.url.includes('/data-providers/ghostfolio/status')) {
             this.tokenStorageService.signOut();
           }
         }

@@ -6,6 +6,7 @@ import {
   DATE_FORMAT_MONTHLY,
   DATE_FORMAT_YEARLY,
   getBackgroundColor,
+  getLocale,
   getTextColor
 } from './helper';
 import { ColorScheme, GroupBy } from './types';
@@ -30,7 +31,7 @@ export function getTooltipOptions({
   colorScheme,
   currency = '',
   groupBy,
-  locale = '',
+  locale = getLocale(),
   unit = ''
 }: {
   colorScheme?: ColorScheme;
@@ -102,7 +103,7 @@ export function getVerticalHoverLinePlugin(
   colorScheme?: ColorScheme
 ) {
   return {
-    afterDatasetsDraw: (chart, x, options) => {
+    afterDatasetsDraw: (chart, _, options) => {
       const active = chart.getActiveElements();
 
       if (!active || active.length === 0) {

@@ -5,12 +5,15 @@ import {
 } from '@ghostfolio/api/services/interfaces/interfaces';
 import { MarketDataService } from '@ghostfolio/api/services/market-data/market-data.service';
 import { DATE_FORMAT } from '@ghostfolio/common/helper';
-import { HistoricalDataItem } from '@ghostfolio/common/interfaces';
+import {
+  HistoricalDataItem,
+  LookupResponse
+} from '@ghostfolio/common/interfaces';
 import { UserWithSettings } from '@ghostfolio/common/types';
+
 import { Injectable, Logger } from '@nestjs/common';
 import { format, subDays } from 'date-fns';
 
-import { LookupItem } from './interfaces/lookup-item.interface';
 import { SymbolItem } from './interfaces/symbol-item.interface';
 
 @Injectable()
@@ -39,8 +42,13 @@ export class SymbolService {
         const days = includeHistoricalData;
 
         const marketData = await this.marketDataService.getRange({
-          dateQuery: { gte: subDays(new Date(), days) },
-          symbols: [dataGatheringItem.symbol]
+          assetProfileIdentifiers: [
+            {
+              dataSource: dataGatheringItem.dataSource,
+              symbol: dataGatheringItem.symbol
+            }
+          ],
+          dateQuery: { gte: subDays(new Date(), days) }
         });
 
         historicalData = marketData.map(({ date, marketPrice: value }) => {
@@ -68,11 +76,21 @@ export class SymbolService {
     date = new Date(),
     symbol
   }: IDataGatheringItem): Promise<IDataProviderHistoricalResponse> {
-    const historicalData = await this.dataProviderService.getHistoricalRaw(
-      [{ dataSource, symbol }],
-      date,
-      date
-    );
+    let historicalData: {
+      [symbol: string]: {
+        [date: string]: IDataProviderHistoricalResponse;
+      };
+    } = {
+      [symbol]: {}
+    };
+
+    try {
+      historicalData = await this.dataProviderService.getHistoricalRaw({
+        assetProfileIdentifiers: [{ dataSource, symbol }],
+        from: date,
+        to: date
+      });
+    } catch {}
 
     return {
       marketPrice:
@@ -88,8 +106,8 @@ export class SymbolService {
     includeIndices?: boolean;
     query: string;
     user: UserWithSettings;
-  }): Promise<{ items: LookupItem[] }> {
-    const results: { items: LookupItem[] } = { items: [] };
+  }): Promise<LookupResponse> {
+    const results: LookupResponse = { items: [] };
 
     if (!query) {
       return results;

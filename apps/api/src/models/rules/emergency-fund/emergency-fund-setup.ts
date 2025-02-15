@@ -11,36 +11,39 @@ export class EmergencyFundSetup extends Rule<Settings> {
     emergencyFund: number
   ) {
     super(exchangeRateDataService, {
+      key: EmergencyFundSetup.name,
       name: 'Emergency Fund: Set up'
     });
 
     this.emergencyFund = emergencyFund;
   }
 
-  public evaluate(ruleSettings: Settings) {
-    if (this.emergencyFund > ruleSettings.threshold) {
+  public evaluate() {
+    if (!this.emergencyFund) {
       return {
-        evaluation: 'An emergency fund has been set up',
-        value: true
+        evaluation: 'No emergency fund has been set up',
+        value: false
       };
     }
 
     return {
-      evaluation: 'No emergency fund has been set up',
-      value: false
+      evaluation: 'An emergency fund has been set up',
+      value: true
     };
   }
 
-  public getSettings(aUserSettings: UserSettings): Settings {
+  public getConfiguration() {
+    return undefined;
+  }
+
+  public getSettings({ baseCurrency, xRayRules }: UserSettings): Settings {
     return {
-      baseCurrency: aUserSettings.baseCurrency,
-      isActive: true,
-      threshold: 0
+      baseCurrency,
+      isActive: xRayRules?.[this.getKey()].isActive ?? true
     };
   }
 }
 
 interface Settings extends RuleSettings {
   baseCurrency: string;
-  threshold: number;
 }

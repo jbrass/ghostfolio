@@ -1,12 +1,3 @@
-@import 'apps/client/src/styles/ghostfolio-style';
-
 :host {
   display: block;
-
-  .fab-container {
-    bottom: 2rem;
-    position: fixed;
-    right: 2rem;
-    z-index: 999;
-  }
 }

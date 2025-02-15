@@ -1,5 +1,6 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
 import { TabConfiguration } from '@ghostfolio/common/interfaces';
+
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject } from 'rxjs';
 
@@ -7,7 +8,8 @@ import { Subject } from 'rxjs';
   host: { class: 'page has-tabs' },
   selector: 'gf-admin-page',
   styleUrls: ['./admin-page.scss'],
-  templateUrl: './admin-page.html'
+  templateUrl: './admin-page.html',
+  standalone: false
 })
 export class AdminPageComponent implements OnDestroy, OnInit {
   public deviceType: string;
@@ -38,7 +40,7 @@ export class AdminPageComponent implements OnDestroy, OnInit {
       },
       {
         iconName: 'flash-outline',
-        label: $localize`Jobs`,
+        label: $localize`Job Queue`,
         path: ['/admin', 'jobs']
       },
       {

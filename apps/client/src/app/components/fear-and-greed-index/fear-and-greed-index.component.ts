@@ -1,32 +1,30 @@
+import { resolveFearAndGreedIndex } from '@ghostfolio/common/helper';
+import { translate } from '@ghostfolio/ui/i18n';
+
 import {
   ChangeDetectionStrategy,
   Component,
   Input,
-  OnChanges,
-  OnInit
+  OnChanges
 } from '@angular/core';
-import { resolveFearAndGreedIndex } from '@ghostfolio/common/helper';
 
 @Component({
   selector: 'gf-fear-and-greed-index',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './fear-and-greed-index.component.html',
-  styleUrls: ['./fear-and-greed-index.component.scss']
+  styleUrls: ['./fear-and-greed-index.component.scss'],
+  standalone: false
 })
-export class FearAndGreedIndexComponent implements OnChanges, OnInit {
+export class FearAndGreedIndexComponent implements OnChanges {
   @Input() fearAndGreedIndex: number;
 
   public fearAndGreedIndexEmoji: string;
   public fearAndGreedIndexText: string;
 
-  public constructor() {}
-
-  public ngOnInit() {}
-
   public ngOnChanges() {
-    const { emoji, text } = resolveFearAndGreedIndex(this.fearAndGreedIndex);
+    const { emoji, key } = resolveFearAndGreedIndex(this.fearAndGreedIndex);
 
     this.fearAndGreedIndexEmoji = emoji;
-    this.fearAndGreedIndexText = text;
+    this.fearAndGreedIndexText = translate(key);
   }
 }

@@ -1,21 +1,22 @@
+import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
 import { SymbolProfileService } from '@ghostfolio/api/services/symbol-profile/symbol-profile.service';
-import { DEFAULT_REQUEST_TIMEOUT } from '@ghostfolio/common/config';
-import { UniqueAsset } from '@ghostfolio/common/interfaces';
+import { AssetProfileIdentifier } from '@ghostfolio/common/interfaces';
+
 import { HttpException, Injectable } from '@nestjs/common';
 import { DataSource } from '@prisma/client';
-import got from 'got';
 import { StatusCodes, getReasonPhrase } from 'http-status-codes';
 
 @Injectable()
 export class LogoService {
   public constructor(
+    private readonly configurationService: ConfigurationService,
     private readonly symbolProfileService: SymbolProfileService
   ) {}
 
   public async getLogoByDataSourceAndSymbol({
     dataSource,
     symbol
-  }: UniqueAsset) {
+  }: AssetProfileIdentifier) {
     if (!DataSource[dataSource]) {
       throw new HttpException(
         getReasonPhrase(StatusCodes.NOT_FOUND),
@@ -27,7 +28,7 @@ export class LogoService {
       { dataSource, symbol }
     ]);
 
-    if (!assetProfile) {
+    if (!assetProfile?.url) {
       throw new HttpException(
         getReasonPhrase(StatusCodes.NOT_FOUND),
         StatusCodes.NOT_FOUND
@@ -37,24 +38,26 @@ export class LogoService {
     return this.getBuffer(assetProfile.url);
   }
 
-  public async getLogoByUrl(aUrl: string) {
+  public getLogoByUrl(aUrl: string) {
     return this.getBuffer(aUrl);
   }
 
-  private getBuffer(aUrl: string) {
-    const abortController = new AbortController();
-
-    setTimeout(() => {
-      abortController.abort();
-    }, DEFAULT_REQUEST_TIMEOUT);
-
-    return got(
+  private async getBuffer(aUrl: string) {
+    const blob = await fetch(
       `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${aUrl}&size=64`,
       {
         headers: { 'User-Agent': 'request' },
-        // @ts-ignore
-        signal: abortController.signal
+        signal: AbortSignal.timeout(
+          this.configurationService.get('REQUEST_TIMEOUT')
+        )
       }
-    ).buffer();
+    ).then((res) => res.blob());
+
+    return {
+      buffer: await blob.arrayBuffer().then((arrayBuffer) => {
+        return Buffer.from(arrayBuffer);
+      }),
+      type: blob.type
+    };
   }
 }

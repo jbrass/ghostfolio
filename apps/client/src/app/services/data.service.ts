@@ -1,15 +1,20 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { Injectable } from '@angular/core';
 import { CreateAccessDto } from '@ghostfolio/api/app/access/create-access.dto';
+import { CreateAccountBalanceDto } from '@ghostfolio/api/app/account-balance/create-account-balance.dto';
 import { CreateAccountDto } from '@ghostfolio/api/app/account/create-account.dto';
+import { TransferBalanceDto } from '@ghostfolio/api/app/account/transfer-balance.dto';
 import { UpdateAccountDto } from '@ghostfolio/api/app/account/update-account.dto';
+import { UpdateBulkMarketDataDto } from '@ghostfolio/api/app/admin/update-bulk-market-data.dto';
+import { CreateTagDto } from '@ghostfolio/api/app/endpoints/tags/create-tag.dto';
+import { UpdateTagDto } from '@ghostfolio/api/app/endpoints/tags/update-tag.dto';
 import { CreateOrderDto } from '@ghostfolio/api/app/order/create-order.dto';
-import { Activities } from '@ghostfolio/api/app/order/interfaces/activities.interface';
+import {
+  Activities,
+  Activity
+} from '@ghostfolio/api/app/order/interfaces/activities.interface';
 import { UpdateOrderDto } from '@ghostfolio/api/app/order/update-order.dto';
-import { PortfolioPositionDetail } from '@ghostfolio/api/app/portfolio/interfaces/portfolio-position-detail.interface';
-import { PortfolioPositions } from '@ghostfolio/api/app/portfolio/interfaces/portfolio-positions.interface';
-import { LookupItem } from '@ghostfolio/api/app/symbol/interfaces/lookup-item.interface';
+import { PortfolioHoldingDetail } from '@ghostfolio/api/app/portfolio/interfaces/portfolio-holding-detail.interface';
 import { SymbolItem } from '@ghostfolio/api/app/symbol/interfaces/symbol-item.interface';
+import { DeleteOwnUserDto } from '@ghostfolio/api/app/user/delete-own-user.dto';
 import { UserItem } from '@ghostfolio/api/app/user/interfaces/user-item.interface';
 import { UpdateUserSettingDto } from '@ghostfolio/api/app/user/update-user-setting.dto';
 import { IDataProviderHistoricalResponse } from '@ghostfolio/api/services/interfaces/interfaces';
@@ -17,26 +22,43 @@ import { PropertyDto } from '@ghostfolio/api/services/property/property.dto';
 import { DATE_FORMAT } from '@ghostfolio/common/helper';
 import {
   Access,
+  AccountBalancesResponse,
   Accounts,
+  AiPromptResponse,
+  ApiKeyResponse,
+  AssetProfileIdentifier,
   BenchmarkMarketDataDetails,
   BenchmarkResponse,
   Export,
   Filter,
   ImportResponse,
   InfoItem,
+  LookupResponse,
+  MarketDataDetailsResponse,
   OAuthResponse,
   PortfolioDetails,
   PortfolioDividends,
+  PortfolioHoldingsResponse,
   PortfolioInvestments,
   PortfolioPerformanceResponse,
-  PortfolioPublicDetails,
-  PortfolioReport,
-  UniqueAsset,
+  PortfolioReportResponse,
+  PublicPortfolioResponse,
   User
 } from '@ghostfolio/common/interfaces';
 import { filterGlobalPermissions } from '@ghostfolio/common/permissions';
 import { AccountWithValue, DateRange, GroupBy } from '@ghostfolio/common/types';
-import { DataSource, Order as OrderModel } from '@prisma/client';
+import { translate } from '@ghostfolio/ui/i18n';
+
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { SortDirection } from '@angular/material/sort';
+import {
+  AccountBalance,
+  DataSource,
+  MarketData,
+  Order as OrderModel,
+  Tag
+} from '@prisma/client';
 import { format, parseISO } from 'date-fns';
 import { cloneDeep, groupBy, isNumber } from 'lodash';
 import { Observable } from 'rxjs';
@@ -56,11 +78,23 @@ export class DataService {
         ACCOUNT: filtersByAccount,
         ASSET_CLASS: filtersByAssetClass,
         ASSET_SUB_CLASS: filtersByAssetSubClass,
+        DATA_SOURCE: [filterByDataSource] = [],
+        HOLDING_TYPE: filtersByHoldingType,
         PRESET_ID: filtersByPresetId,
+        SEARCH_QUERY: filtersBySearchQuery,
+        SYMBOL: [filterBySymbol] = [],
         TAG: filtersByTag
       } = groupBy(filters, (filter) => {
         return filter.type;
       });
+
+      if (filterByDataSource) {
+        params = params.append('dataSource', filterByDataSource.id);
+      }
+
+      if (filterBySymbol) {
+        params = params.append('symbol', filterBySymbol.id);
+      }
 
       if (filtersByAccount) {
         params = params.append(
@@ -95,8 +129,16 @@ export class DataService {
         );
       }
 
+      if (filtersByHoldingType) {
+        params = params.append('holdingType', filtersByHoldingType[0].id);
+      }
+
       if (filtersByPresetId) {
         params = params.append('presetId', filtersByPresetId[0].id);
+      }
+
+      if (filtersBySearchQuery) {
+        params = params.append('query', filtersBySearchQuery[0].id);
       }
 
       if (filtersByTag) {
@@ -131,28 +173,75 @@ export class DataService {
     return this.http.get<AccountWithValue>(`/api/v1/account/${aAccountId}`);
   }
 
-  public fetchAccounts() {
-    return this.http.get<Accounts>('/api/v1/account');
+  public fetchAccountBalances(aAccountId: string) {
+    return this.http.get<AccountBalancesResponse>(
+      `/api/v1/account/${aAccountId}/balances`
+    );
+  }
+
+  public fetchAccounts({ filters }: { filters?: Filter[] } = {}) {
+    const params = this.buildFiltersAsQueryParams({ filters });
+
+    return this.http.get<Accounts>('/api/v1/account', { params });
   }
 
   public fetchActivities({
-    filters
+    filters,
+    range,
+    skip,
+    sortColumn,
+    sortDirection,
+    take
   }: {
     filters?: Filter[];
+    range?: DateRange;
+    skip?: number;
+    sortColumn?: string;
+    sortDirection?: SortDirection;
+    take?: number;
   }): Observable<Activities> {
-    return this.http
-      .get<any>('/api/v1/order', {
-        params: this.buildFiltersAsQueryParams({ filters })
+    let params = this.buildFiltersAsQueryParams({ filters });
+
+    if (range) {
+      params = params.append('range', range);
+    }
+
+    if (skip) {
+      params = params.append('skip', skip);
+    }
+
+    if (sortColumn) {
+      params = params.append('sortColumn', sortColumn);
+    }
+
+    if (sortDirection) {
+      params = params.append('sortDirection', sortDirection);
+    }
+
+    if (take) {
+      params = params.append('take', take);
+    }
+
+    return this.http.get<any>('/api/v1/order', { params }).pipe(
+      map(({ activities, count }) => {
+        for (const activity of activities) {
+          activity.createdAt = parseISO(activity.createdAt);
+          activity.date = parseISO(activity.date);
+        }
+        return { activities, count };
       })
-      .pipe(
-        map(({ activities }) => {
-          for (const activity of activities) {
-            activity.createdAt = parseISO(activity.createdAt);
-            activity.date = parseISO(activity.date);
-          }
-          return { activities };
-        })
-      );
+    );
+  }
+
+  public fetchActivity(aActivityId: string) {
+    return this.http.get<Activity>(`/api/v1/order/${aActivityId}`).pipe(
+      map((activity) => {
+        activity.createdAt = parseISO(activity.createdAt as unknown as string);
+        activity.date = parseISO(activity.date as unknown as string);
+
+        return activity;
+      })
+    );
   }
 
   public fetchDividends({
@@ -173,7 +262,7 @@ export class DataService {
     });
   }
 
-  public fetchDividendsImport({ dataSource, symbol }: UniqueAsset) {
+  public fetchDividendsImport({ dataSource, symbol }: AssetProfileIdentifier) {
     return this.http.get<ImportResponse>(
       `/api/v1/import/dividends/${dataSource}/${symbol}`
     );
@@ -199,16 +288,30 @@ export class DataService {
     return this.http.delete<any>(`/api/v1/account/${aId}`);
   }
 
-  public deleteAllOrders() {
-    return this.http.delete<any>(`/api/v1/order/`);
+  public deleteAccountBalance(aId: string) {
+    return this.http.delete<any>(`/api/v1/account-balance/${aId}`);
   }
 
-  public deleteBenchmark({ dataSource, symbol }: UniqueAsset) {
-    return this.http.delete<any>(`/api/v1/benchmark/${dataSource}/${symbol}`);
+  public deleteActivities({ filters }) {
+    const params = this.buildFiltersAsQueryParams({ filters });
+
+    return this.http.delete<any>('/api/v1/order', { params });
   }
 
-  public deleteOrder(aId: string) {
+  public deleteActivity(aId: string) {
     return this.http.delete<any>(`/api/v1/order/${aId}`);
+  }
+
+  public deleteBenchmark({ dataSource, symbol }: AssetProfileIdentifier) {
+    return this.http.delete<any>(`/api/v1/benchmarks/${dataSource}/${symbol}`);
+  }
+
+  public deleteOwnUser(aData: DeleteOwnUserDto) {
+    return this.http.delete<any>(`/api/v1/user`, { body: aData });
+  }
+
+  public deleteTag(aId: string) {
+    return this.http.delete<void>(`/api/v1/tags/${aId}`);
   }
 
   public deleteUser(aId: string) {
@@ -219,27 +322,62 @@ export class DataService {
     return this.http.get<Access[]>('/api/v1/access');
   }
 
-  public fetchBenchmarkBySymbol({
+  public fetchAsset({
     dataSource,
-    startDate,
     symbol
+  }: AssetProfileIdentifier): Observable<MarketDataDetailsResponse> {
+    return this.http.get<any>(`/api/v1/asset/${dataSource}/${symbol}`).pipe(
+      map((data) => {
+        for (const item of data.marketData) {
+          item.date = parseISO(item.date);
+        }
+        return data;
+      })
+    );
+  }
+
+  public fetchBenchmarkForUser({
+    dataSource,
+    filters,
+    range,
+    startDate,
+    symbol,
+    withExcludedAccounts
   }: {
+    filters?: Filter[];
+    range: DateRange;
     startDate: Date;
-  } & UniqueAsset): Observable<BenchmarkMarketDataDetails> {
+    withExcludedAccounts?: boolean;
+  } & AssetProfileIdentifier): Observable<BenchmarkMarketDataDetails> {
+    let params = this.buildFiltersAsQueryParams({ filters });
+
+    params = params.append('range', range);
+
+    if (withExcludedAccounts) {
+      params = params.append('withExcludedAccounts', withExcludedAccounts);
+    }
+
     return this.http.get<BenchmarkMarketDataDetails>(
-      `/api/v1/benchmark/${dataSource}/${symbol}/${format(
+      `/api/v1/benchmarks/${dataSource}/${symbol}/${format(
         startDate,
         DATE_FORMAT
-      )}`
+      )}`,
+      { params }
     );
   }
 
   public fetchBenchmarks() {
-    return this.http.get<BenchmarkResponse>('/api/v1/benchmark');
+    return this.http.get<BenchmarkResponse>('/api/v1/benchmarks');
   }
 
-  public fetchExport(activityIds?: string[]) {
-    let params = new HttpParams();
+  public fetchExport({
+    activityIds,
+    filters
+  }: {
+    activityIds?: string[];
+    filters?: Filter[];
+  } = {}) {
+    let params = this.buildFiltersAsQueryParams({ filters });
 
     if (activityIds) {
       params = params.append('activityIds', activityIds.join(','));
@@ -250,11 +388,36 @@ export class DataService {
     });
   }
 
+  public fetchHoldingDetail({
+    dataSource,
+    symbol
+  }: {
+    dataSource: DataSource;
+    symbol: string;
+  }) {
+    return this.http
+      .get<PortfolioHoldingDetail>(
+        `/api/v1/portfolio/position/${dataSource}/${symbol}`
+      )
+      .pipe(
+        map((data) => {
+          if (data.orders) {
+            for (const order of data.orders) {
+              order.createdAt = parseISO(order.createdAt as unknown as string);
+              order.date = parseISO(order.date as unknown as string);
+            }
+          }
+
+          return data;
+        })
+      );
+  }
+
   public fetchInfo(): InfoItem {
     const info = cloneDeep((window as any).info);
-    const utmSource = <'ios' | 'trusted-web-activity'>(
-      window.localStorage.getItem('utm_source')
-    );
+    const utmSource = window.localStorage.getItem('utm_source') as
+      | 'ios'
+      | 'trusted-web-activity';
 
     info.globalPermissions = filterGlobalPermissions(
       info.globalPermissions,
@@ -283,6 +446,25 @@ export class DataService {
     );
   }
 
+  public fetchMarketDataBySymbol({
+    dataSource,
+    symbol
+  }: {
+    dataSource: DataSource;
+    symbol: string;
+  }): Observable<MarketDataDetailsResponse> {
+    return this.http
+      .get<any>(`/api/v1/market-data/${dataSource}/${symbol}`)
+      .pipe(
+        map((data) => {
+          for (const item of data.marketData) {
+            item.date = parseISO(item.date);
+          }
+          return data;
+        })
+      );
+  }
+
   public fetchSymbolItem({
     dataSource,
     includeHistoricalData,
@@ -303,21 +485,6 @@ export class DataService {
     });
   }
 
-  public fetchPositions({
-    filters,
-    range
-  }: {
-    filters?: Filter[];
-    range: DateRange;
-  }): Observable<PortfolioPositions> {
-    let params = this.buildFiltersAsQueryParams({ filters });
-    params = params.append('range', range);
-
-    return this.http.get<PortfolioPositions>('/api/v1/portfolio/positions', {
-      params
-    });
-  }
-
   public fetchSymbols({
     includeIndices = false,
     query
@@ -332,22 +499,30 @@ export class DataService {
     }
 
     return this.http
-      .get<{ items: LookupItem[] }>('/api/v1/symbol/lookup', { params })
+      .get<LookupResponse>('/api/v1/symbol/lookup', { params })
       .pipe(
-        map((respose) => {
-          return respose.items;
+        map(({ items }) => {
+          return items;
         })
       );
   }
 
   public fetchPortfolioDetails({
-    filters
+    filters,
+    withMarkets = false
   }: {
     filters?: Filter[];
+    withMarkets?: boolean;
   } = {}): Observable<PortfolioDetails> {
+    let params = this.buildFiltersAsQueryParams({ filters });
+
+    if (withMarkets) {
+      params = params.append('withMarkets', withMarkets);
+    }
+
     return this.http
       .get<any>('/api/v1/portfolio/details', {
-        params: this.buildFiltersAsQueryParams({ filters })
+        params
       })
       .pipe(
         map((response) => {
@@ -359,6 +534,62 @@ export class DataService {
 
           if (response.holdings) {
             for (const symbol of Object.keys(response.holdings)) {
+              response.holdings[symbol].assetClassLabel = translate(
+                response.holdings[symbol].assetClass
+              );
+
+              response.holdings[symbol].assetSubClassLabel = translate(
+                response.holdings[symbol].assetSubClass
+              );
+
+              response.holdings[symbol].dateOfFirstActivity = response.holdings[
+                symbol
+              ].dateOfFirstActivity
+                ? parseISO(response.holdings[symbol].dateOfFirstActivity)
+                : undefined;
+
+              response.holdings[symbol].value = isNumber(
+                response.holdings[symbol].value
+              )
+                ? response.holdings[symbol].value
+                : response.holdings[symbol].valueInPercentage;
+            }
+          }
+
+          return response;
+        })
+      );
+  }
+
+  public fetchPortfolioHoldings({
+    filters,
+    range
+  }: {
+    filters?: Filter[];
+    range?: DateRange;
+  } = {}) {
+    let params = this.buildFiltersAsQueryParams({ filters });
+
+    if (range) {
+      params = params.append('range', range);
+    }
+
+    return this.http
+      .get<PortfolioHoldingsResponse>('/api/v1/portfolio/holdings', {
+        params
+      })
+      .pipe(
+        map((response) => {
+          if (response.holdings) {
+            for (const symbol of Object.keys(response.holdings)) {
+              response.holdings[symbol].assetClassLabel = translate(
+                response.holdings[symbol].assetClass
+              );
+
+              response.holdings[symbol].assetSubClassLabel = translate(
+                response.holdings[symbol].assetSubClass
+              );
+
               response.holdings[symbol].dateOfFirstActivity = response.holdings[
                 symbol
               ].dateOfFirstActivity
@@ -380,13 +611,25 @@ export class DataService {
 
   public fetchPortfolioPerformance({
     filters,
-    range
+    range,
+    withExcludedAccounts = false,
+    withItems = false
   }: {
     filters?: Filter[];
     range: DateRange;
+    withExcludedAccounts?: boolean;
+    withItems?: boolean;
   }): Observable<PortfolioPerformanceResponse> {
     let params = this.buildFiltersAsQueryParams({ filters });
     params = params.append('range', range);
+
+    if (withExcludedAccounts) {
+      params = params.append('withExcludedAccounts', withExcludedAccounts);
+    }
+
+    if (withItems) {
+      params = params.append('withItems', withItems);
+    }
 
     return this.http
       .get<any>(`/api/v2/portfolio/performance`, {
@@ -403,9 +646,17 @@ export class DataService {
       );
   }
 
-  public fetchPortfolioPublic(aId: string) {
+  public fetchPortfolioReport() {
+    return this.http.get<PortfolioReportResponse>('/api/v1/portfolio/report');
+  }
+
+  public fetchPrompt() {
+    return this.http.get<AiPromptResponse>('/api/v1/ai/prompt');
+  }
+
+  public fetchPublicPortfolio(aAccessId: string) {
     return this.http
-      .get<PortfolioPublicDetails>(`/api/v1/portfolio/public/${aId}`)
+      .get<PublicPortfolioResponse>(`/api/v1/public/${aAccessId}/portfolio`)
       .pipe(
         map((response) => {
           if (response.holdings) {
@@ -423,59 +674,63 @@ export class DataService {
       );
   }
 
-  public fetchPortfolioReport() {
-    return this.http.get<PortfolioReport>('/api/v1/portfolio/report');
-  }
-
-  public fetchPositionDetail({
-    dataSource,
-    symbol
-  }: {
-    dataSource: DataSource;
-    symbol: string;
-  }) {
-    return this.http
-      .get<PortfolioPositionDetail>(
-        `/api/v1/portfolio/position/${dataSource}/${symbol}`
-      )
-      .pipe(
-        map((data) => {
-          if (data.orders) {
-            for (const order of data.orders) {
-              order.createdAt = parseISO(<string>(<unknown>order.createdAt));
-              order.date = parseISO(<string>(<unknown>order.date));
-            }
-          }
-
-          return data;
-        })
-      );
+  public fetchTags() {
+    return this.http.get<Tag[]>('/api/v1/tags');
   }
 
   public loginAnonymous(accessToken: string) {
-    return this.http.post<OAuthResponse>(`/api/v1/auth/anonymous`, {
+    return this.http.post<OAuthResponse>('/api/v1/auth/anonymous', {
       accessToken
     });
   }
 
   public postAccess(aAccess: CreateAccessDto) {
-    return this.http.post<OrderModel>(`/api/v1/access`, aAccess);
+    return this.http.post<OrderModel>('/api/v1/access', aAccess);
   }
 
   public postAccount(aAccount: CreateAccountDto) {
-    return this.http.post<OrderModel>(`/api/v1/account`, aAccount);
+    return this.http.post<OrderModel>('/api/v1/account', aAccount);
   }
 
-  public postBenchmark(benchmark: UniqueAsset) {
-    return this.http.post(`/api/v1/benchmark`, benchmark);
+  public postAccountBalance(aAccountBalance: CreateAccountBalanceDto) {
+    return this.http.post<AccountBalance>(
+      '/api/v1/account-balance',
+      aAccountBalance
+    );
+  }
+
+  public postApiKey() {
+    return this.http.post<ApiKeyResponse>('/api/v1/api-keys', {});
+  }
+
+  public postBenchmark(benchmark: AssetProfileIdentifier) {
+    return this.http.post('/api/v1/benchmarks', benchmark);
+  }
+
+  public postMarketData({
+    dataSource,
+    marketData,
+    symbol
+  }: {
+    dataSource: DataSource;
+    marketData: UpdateBulkMarketDataDto;
+    symbol: string;
+  }) {
+    const url = `/api/v1/market-data/${dataSource}/${symbol}`;
+
+    return this.http.post<MarketData>(url, marketData);
   }
 
   public postOrder(aOrder: CreateOrderDto) {
-    return this.http.post<OrderModel>(`/api/v1/order`, aOrder);
+    return this.http.post<OrderModel>('/api/v1/order', aOrder);
+  }
+
+  public postTag(aTag: CreateTagDto) {
+    return this.http.post<Tag>(`/api/v1/tags`, aTag);
   }
 
   public postUser() {
-    return this.http.post<UserItem>(`/api/v1/user`, {});
+    return this.http.post<UserItem>('/api/v1/user', {});
   }
 
   public putAccount(aAccount: UpdateAccountDto) {
@@ -486,12 +741,27 @@ export class DataService {
     return this.http.put<void>(`/api/v1/admin/settings/${key}`, aData);
   }
 
+  public putHoldingTags({
+    dataSource,
+    symbol,
+    tags
+  }: { tags: Tag[] } & AssetProfileIdentifier) {
+    return this.http.put<void>(
+      `/api/v1/portfolio/position/${dataSource}/${symbol}/tags`,
+      { tags }
+    );
+  }
+
   public putOrder(aOrder: UpdateOrderDto) {
     return this.http.put<UserItem>(`/api/v1/order/${aOrder.id}`, aOrder);
   }
 
+  public putTag(aTag: UpdateTagDto) {
+    return this.http.put<Tag>(`/api/v1/tags/${aTag.id}`, aTag);
+  }
+
   public putUserSetting(aData: UpdateUserSettingDto) {
-    return this.http.put<User>(`/api/v1/user/setting`, aData);
+    return this.http.put<User>('/api/v1/user/setting', aData);
   }
 
   public redeemCoupon(couponCode: string) {
@@ -500,11 +770,23 @@ export class DataService {
     });
   }
 
+  public transferAccountBalance({
+    accountIdFrom,
+    accountIdTo,
+    balance
+  }: TransferBalanceDto) {
+    return this.http.post('/api/v1/account/transfer-balance', {
+      accountIdFrom,
+      accountIdTo,
+      balance
+    });
+  }
+
   public updateInfo() {
     this.http.get<InfoItem>('/api/v1/info').subscribe((info) => {
-      const utmSource = <'ios' | 'trusted-web-activity'>(
-        window.localStorage.getItem('utm_source')
-      );
+      const utmSource = window.localStorage.getItem('utm_source') as
+        | 'ios'
+        | 'trusted-web-activity';
 
       info.globalPermissions = filterGlobalPermissions(
         info.globalPermissions,

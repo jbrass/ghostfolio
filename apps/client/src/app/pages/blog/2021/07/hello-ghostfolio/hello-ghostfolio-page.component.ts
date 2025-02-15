@@ -6,10 +6,9 @@ import { RouterModule } from '@angular/router';
   host: { class: 'page' },
   imports: [MatButtonModule, RouterModule],
   selector: 'gf-hello-ghostfolio-page',
-  standalone: true,
   templateUrl: './hello-ghostfolio-page.html'
 })
 export class HelloGhostfolioPageComponent {
-  public routerLinkPricing = ['/' + $localize`pricing`];
-  public routerLinkResources = ['/' + $localize`resources`];
+  public routerLinkPricing = ['/' + $localize`:snake-case:pricing`];
+  public routerLinkResources = ['/' + $localize`:snake-case:resources`];
 }

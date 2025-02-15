@@ -1,11 +1,16 @@
+import { GfDialogFooterModule } from '@ghostfolio/client/components/dialog-footer/dialog-footer.module';
+import { GfDialogHeaderModule } from '@ghostfolio/client/components/dialog-header/dialog-header.module';
+import { GfInvestmentChartModule } from '@ghostfolio/client/components/investment-chart/investment-chart.module';
+import { GfAccountBalancesComponent } from '@ghostfolio/ui/account-balances';
+import { GfActivitiesTableComponent } from '@ghostfolio/ui/activities-table';
+import { GfHoldingsTableComponent } from '@ghostfolio/ui/holdings-table';
+import { GfValueComponent } from '@ghostfolio/ui/value';
+
 import { CommonModule } from '@angular/common';
 import { CUSTOM_ELEMENTS_SCHEMA, NgModule } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
-import { GfDialogFooterModule } from '@ghostfolio/client/components/dialog-footer/dialog-footer.module';
-import { GfDialogHeaderModule } from '@ghostfolio/client/components/dialog-header/dialog-header.module';
-import { GfActivitiesTableModule } from '@ghostfolio/ui/activities-table/activities-table.module';
-import { GfValueModule } from '@ghostfolio/ui/value';
+import { MatTabsModule } from '@angular/material/tabs';
 import { NgxSkeletonLoaderModule } from 'ngx-skeleton-loader';
 
 import { AccountDetailDialog } from './account-detail-dialog.component';
@@ -14,12 +19,16 @@ import { AccountDetailDialog } from './account-detail-dialog.component';
   declarations: [AccountDetailDialog],
   imports: [
     CommonModule,
-    GfActivitiesTableModule,
+    GfAccountBalancesComponent,
+    GfActivitiesTableComponent,
     GfDialogFooterModule,
     GfDialogHeaderModule,
-    GfValueModule,
+    GfHoldingsTableComponent,
+    GfInvestmentChartModule,
+    GfValueComponent,
     MatButtonModule,
     MatDialogModule,
+    MatTabsModule,
     NgxSkeletonLoaderModule
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA]

@@ -1,6 +1,5 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
-import { MatCheckboxChange } from '@angular/material/checkbox';
-import { environment } from '@ghostfolio/client/../environments/environment';
+import { ConfirmationDialogType } from '@ghostfolio/client/core/notification/confirmation-dialog/confirmation-dialog.type';
+import { NotificationService } from '@ghostfolio/client/core/notification/notification.service';
 import { AdminService } from '@ghostfolio/client/services/admin.service';
 import { CacheService } from '@ghostfolio/client/services/cache.service';
 import { DataService } from '@ghostfolio/client/services/data.service';
@@ -8,13 +7,22 @@ import { UserService } from '@ghostfolio/client/services/user/user.service';
 import {
   PROPERTY_COUPONS,
   PROPERTY_CURRENCIES,
+  PROPERTY_IS_DATA_GATHERING_ENABLED,
   PROPERTY_IS_READ_ONLY_MODE,
   PROPERTY_IS_USER_SIGNUP_ENABLED,
   PROPERTY_SYSTEM_MESSAGE,
   ghostfolioPrefix
 } from '@ghostfolio/common/config';
-import { Coupon, InfoItem, User } from '@ghostfolio/common/interfaces';
+import {
+  Coupon,
+  InfoItem,
+  SystemMessage,
+  User
+} from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { MatSlideToggleChange } from '@angular/material/slide-toggle';
 import {
   differenceInSeconds,
   formatDistanceToNowStrict,
@@ -28,7 +36,8 @@ import { takeUntil } from 'rxjs/operators';
 @Component({
   selector: 'gf-admin-overview',
   styleUrls: ['./admin-overview.scss'],
-  templateUrl: './admin-overview.html'
+  templateUrl: './admin-overview.html',
+  standalone: false
 })
 export class AdminOverviewComponent implements OnDestroy, OnInit {
   public couponDuration: StringValue = '14 days';
@@ -39,11 +48,13 @@ export class AdminOverviewComponent implements OnDestroy, OnInit {
   public hasPermissionForSystemMessage: boolean;
   public hasPermissionToToggleReadOnlyMode: boolean;
   public info: InfoItem;
+  public isDataGatheringEnabled: boolean;
   public permissions = permissions;
+  public systemMessage: SystemMessage;
   public transactionCount: number;
   public userCount: number;
   public user: User;
-  public version = environment.version;
+  public version: string;
 
   private unsubscribeSubject = new Subject<void>();
 
@@ -52,6 +63,7 @@ export class AdminOverviewComponent implements OnDestroy, OnInit {
     private cacheService: CacheService,
     private changeDetectorRef: ChangeDetectorRef,
     private dataService: DataService,
+    private notificationService: NotificationService,
     private userService: UserService
   ) {
     this.info = this.dataService.fetchInfo();
@@ -114,8 +126,17 @@ export class AdminOverviewComponent implements OnDestroy, OnInit {
     const currency = prompt($localize`Please add a currency:`);
 
     if (currency) {
-      const currencies = uniq([...this.customCurrencies, currency]);
-      this.putAdminSetting({ key: PROPERTY_CURRENCIES, value: currencies });
+      if (currency.length === 3) {
+        const currencies = uniq([
+          ...this.customCurrencies,
+          currency.toUpperCase()
+        ]);
+        this.putAdminSetting({ key: PROPERTY_CURRENCIES, value: currencies });
+      } else {
+        this.notificationService.alert({
+          title: $localize`${currency} is an invalid currency!`
+        });
+      }
     }
   }
 
@@ -124,73 +145,98 @@ export class AdminOverviewComponent implements OnDestroy, OnInit {
   }
 
   public onDeleteCoupon(aCouponCode: string) {
-    const confirmation = confirm(
-      $localize`Do you really want to delete this coupon?`
-    );
-
-    if (confirmation === true) {
-      const coupons = this.coupons.filter((coupon) => {
-        return coupon.code !== aCouponCode;
-      });
-      this.putAdminSetting({ key: PROPERTY_COUPONS, value: coupons });
-    }
-  }
-
-  public onDeleteCurrency(aCurrency: string) {
-    const confirmation = confirm(
-      $localize`Do you really want to delete this currency?`
-    );
-
-    if (confirmation === true) {
-      const currencies = this.customCurrencies.filter((currency) => {
-        return currency !== aCurrency;
-      });
-      this.putAdminSetting({ key: PROPERTY_CURRENCIES, value: currencies });
-    }
-  }
-
-  public onDeleteSystemMessage() {
-    this.putAdminSetting({ key: PROPERTY_SYSTEM_MESSAGE, value: undefined });
-  }
-
-  public onFlushCache() {
-    const confirmation = confirm(
-      $localize`Do you really want to flush the cache?`
-    );
-
-    if (confirmation === true) {
-      this.cacheService
-        .flush()
-        .pipe(takeUntil(this.unsubscribeSubject))
-        .subscribe(() => {
-          setTimeout(() => {
-            window.location.reload();
-          }, 300);
+    this.notificationService.confirm({
+      confirmFn: () => {
+        const coupons = this.coupons.filter((coupon) => {
+          return coupon.code !== aCouponCode;
         });
-    }
-  }
-
-  public onReadOnlyModeChange(aEvent: MatCheckboxChange) {
-    this.putAdminSetting({
-      key: PROPERTY_IS_READ_ONLY_MODE,
-      value: aEvent.checked ? true : undefined
+        this.putAdminSetting({ key: PROPERTY_COUPONS, value: coupons });
+      },
+      confirmType: ConfirmationDialogType.Warn,
+      title: $localize`Do you really want to delete this coupon?`
     });
   }
 
-  public onEnableUserSignupModeChange(aEvent: MatCheckboxChange) {
+  public onDeleteCurrency(aCurrency: string) {
+    this.notificationService.confirm({
+      confirmFn: () => {
+        const currencies = this.customCurrencies.filter((currency) => {
+          return currency !== aCurrency;
+        });
+        this.putAdminSetting({ key: PROPERTY_CURRENCIES, value: currencies });
+      },
+      confirmType: ConfirmationDialogType.Warn,
+      title: $localize`Do you really want to delete this currency?`
+    });
+  }
+
+  public onDeleteSystemMessage() {
+    this.notificationService.confirm({
+      confirmFn: () => {
+        this.putAdminSetting({
+          key: PROPERTY_SYSTEM_MESSAGE,
+          value: undefined
+        });
+      },
+      confirmType: ConfirmationDialogType.Warn,
+      title: $localize`Do you really want to delete this system message?`
+    });
+  }
+
+  public onEnableDataGatheringChange(aEvent: MatSlideToggleChange) {
+    this.putAdminSetting({
+      key: PROPERTY_IS_DATA_GATHERING_ENABLED,
+      value: aEvent.checked ? undefined : false
+    });
+  }
+
+  public onFlushCache() {
+    this.notificationService.confirm({
+      confirmFn: () => {
+        this.cacheService
+          .flush()
+          .pipe(takeUntil(this.unsubscribeSubject))
+          .subscribe(() => {
+            setTimeout(() => {
+              window.location.reload();
+            }, 300);
+          });
+      },
+      confirmType: ConfirmationDialogType.Warn,
+      title: $localize`Do you really want to flush the cache?`
+    });
+  }
+
+  public onEnableUserSignupModeChange(aEvent: MatSlideToggleChange) {
     this.putAdminSetting({
       key: PROPERTY_IS_USER_SIGNUP_ENABLED,
       value: aEvent.checked ? undefined : false
     });
   }
 
+  public onReadOnlyModeChange(aEvent: MatSlideToggleChange) {
+    this.putAdminSetting({
+      key: PROPERTY_IS_READ_ONLY_MODE,
+      value: aEvent.checked ? true : undefined
+    });
+  }
+
   public onSetSystemMessage() {
-    const systemMessage = prompt($localize`Please set your system message:`);
+    const systemMessage = prompt(
+      $localize`Please set your system message:`,
+      JSON.stringify(
+        this.systemMessage ??
+          ({
+            message: '⚒️ Scheduled maintenance in progress...',
+            targetGroups: ['Basic', 'Premium']
+          } as SystemMessage)
+      )
+    );
 
     if (systemMessage) {
       this.putAdminSetting({
         key: PROPERTY_SYSTEM_MESSAGE,
-        value: systemMessage
+        value: JSON.parse(systemMessage)
       });
     }
   }
@@ -204,15 +250,25 @@ export class AdminOverviewComponent implements OnDestroy, OnInit {
     this.adminService
       .fetchAdminData()
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe(({ exchangeRates, settings, transactionCount, userCount }) => {
-        this.coupons = (settings[PROPERTY_COUPONS] as Coupon[]) ?? [];
-        this.customCurrencies = settings[PROPERTY_CURRENCIES] as string[];
-        this.exchangeRates = exchangeRates;
-        this.transactionCount = transactionCount;
-        this.userCount = userCount;
+      .subscribe(
+        ({ exchangeRates, settings, transactionCount, userCount, version }) => {
+          this.coupons = (settings[PROPERTY_COUPONS] as Coupon[]) ?? [];
+          this.customCurrencies = settings[PROPERTY_CURRENCIES] as string[];
+          this.exchangeRates = exchangeRates;
+          this.isDataGatheringEnabled =
+            settings[PROPERTY_IS_DATA_GATHERING_ENABLED] === false
+              ? false
+              : true;
+          this.systemMessage = settings[
+            PROPERTY_SYSTEM_MESSAGE
+          ] as SystemMessage;
+          this.transactionCount = transactionCount;
+          this.userCount = userCount;
+          this.version = version;
 
-        this.changeDetectorRef.markForCheck();
-      });
+          this.changeDetectorRef.markForCheck();
+        }
+      );
   }
 
   private generateCouponCode(aLength: number) {

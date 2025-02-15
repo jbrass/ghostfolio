@@ -1,14 +1,11 @@
-import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
 import { PrismaService } from '@ghostfolio/api/services/prisma/prisma.service';
+
 import { Injectable } from '@nestjs/common';
 import { AuthDevice, Prisma } from '@prisma/client';
 
 @Injectable()
 export class AuthDeviceService {
-  public constructor(
-    private readonly configurationService: ConfigurationService,
-    private readonly prismaService: PrismaService
-  ) {}
+  public constructor(private readonly prismaService: PrismaService) {}
 
   public async authDevice(
     where: Prisma.AuthDeviceWhereUniqueInput

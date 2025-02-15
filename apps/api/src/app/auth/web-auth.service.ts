@@ -3,6 +3,7 @@ import { AuthDeviceService } from '@ghostfolio/api/app/auth-device/auth-device.s
 import { UserService } from '@ghostfolio/api/app/user/user.service';
 import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
 import type { RequestWithUser } from '@ghostfolio/common/types';
+
 import {
   Inject,
   Injectable,
@@ -12,16 +13,16 @@ import {
 import { REQUEST } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import {
+  generateAuthenticationOptions,
   GenerateAuthenticationOptionsOpts,
+  generateRegistrationOptions,
   GenerateRegistrationOptionsOpts,
   VerifiedAuthenticationResponse,
   VerifiedRegistrationResponse,
-  VerifyAuthenticationResponseOpts,
-  VerifyRegistrationResponseOpts,
-  generateAuthenticationOptions,
-  generateRegistrationOptions,
   verifyAuthenticationResponse,
-  verifyRegistrationResponse
+  VerifyAuthenticationResponseOpts,
+  verifyRegistrationResponse,
+  VerifyRegistrationResponseOpts
 } from '@simplewebauthn/server';
 
 import {
@@ -40,7 +41,7 @@ export class WebAuthService {
   ) {}
 
   get rpID() {
-    return this.configurationService.get('WEB_AUTH_RP_ID');
+    return new URL(this.configurationService.get('ROOT_URL')).hostname;
   }
 
   get expectedOrigin() {
@@ -64,7 +65,7 @@ export class WebAuthService {
       }
     };
 
-    const options = generateRegistrationOptions(opts);
+    const options = await generateRegistrationOptions(opts);
 
     await this.userService.updateUser({
       data: {
@@ -79,7 +80,6 @@ export class WebAuthService {
   }
 
   public async verifyAttestation(
-    deviceName: string,
     credential: AttestationCredentialJSON
   ): Promise<AuthDeviceDto> {
     const user = this.request.user;
@@ -88,10 +88,16 @@ export class WebAuthService {
     let verification: VerifiedRegistrationResponse;
     try {
       const opts: VerifyRegistrationResponseOpts = {
-        credential,
         expectedChallenge,
         expectedOrigin: this.expectedOrigin,
-        expectedRPID: this.rpID
+        expectedRPID: this.rpID,
+        response: {
+          clientExtensionResults: credential.clientExtensionResults,
+          id: credential.id,
+          rawId: credential.rawId,
+          response: credential.response,
+          type: 'public-key'
+        }
       };
       verification = await verifyRegistrationResponse(opts);
     } catch (error) {
@@ -117,8 +123,8 @@ export class WebAuthService {
          */
         existingDevice = await this.deviceService.createAuthDevice({
           counter,
-          credentialPublicKey,
-          credentialId: credentialID,
+          credentialId: Buffer.from(credentialID),
+          credentialPublicKey: Buffer.from(credentialPublicKey),
           User: { connect: { id: user.id } }
         });
       }
@@ -152,7 +158,7 @@ export class WebAuthService {
       userVerification: 'preferred'
     };
 
-    const options = generateAuthenticationOptions(opts);
+    const options = await generateAuthenticationOptions(opts);
 
     await this.userService.updateUser({
       data: {
@@ -181,7 +187,6 @@ export class WebAuthService {
     let verification: VerifiedAuthenticationResponse;
     try {
       const opts: VerifyAuthenticationResponseOpts = {
-        credential,
         authenticator: {
           credentialID: device.credentialId,
           credentialPublicKey: device.credentialPublicKey,
@@ -189,9 +194,16 @@ export class WebAuthService {
         },
         expectedChallenge: `${user.authChallenge}`,
         expectedOrigin: this.expectedOrigin,
-        expectedRPID: this.rpID
+        expectedRPID: this.rpID,
+        response: {
+          clientExtensionResults: credential.clientExtensionResults,
+          id: credential.id,
+          rawId: credential.rawId,
+          response: credential.response,
+          type: 'public-key'
+        }
       };
-      verification = verifyAuthenticationResponse(opts);
+      verification = await verifyAuthenticationResponse(opts);
     } catch (error) {
       Logger.error(error, 'WebAuthService');
       throw new InternalServerErrorException({ error: error.message });

@@ -1,11 +1,12 @@
+import { SubscriptionInterstitialDialogParams } from '@ghostfolio/client/components/subscription-interstitial-dialog/interfaces/interfaces';
+import { SubscriptionInterstitialDialog } from '@ghostfolio/client/components/subscription-interstitial-dialog/subscription-interstitial-dialog.component';
+import { Filter, User } from '@ghostfolio/common/interfaces';
+import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ObservableStore } from '@codewithdan/observable-store';
-import { SubscriptionInterstitialDialogParams } from '@ghostfolio/client/components/subscription-interstitial-dialog/interfaces/interfaces';
-import { SubscriptionInterstitialDialog } from '@ghostfolio/client/components/subscription-interstitial-dialog/subscription-interstitial-dialog.component';
-import { User } from '@ghostfolio/common/interfaces';
-import { hasPermission, permissions } from '@ghostfolio/common/permissions';
 import { parseISO } from 'date-fns';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Observable, Subject, of } from 'rxjs';
@@ -46,6 +47,52 @@ export class UserService extends ObservableStore<UserStoreState> {
     }
   }
 
+  public getFilters() {
+    const filters: Filter[] = [];
+    const user = this.getState().user;
+
+    if (user?.settings['filters.accounts']) {
+      filters.push({
+        id: user.settings['filters.accounts'][0],
+        type: 'ACCOUNT'
+      });
+    }
+
+    if (user?.settings['filters.assetClasses']) {
+      filters.push({
+        id: user.settings['filters.assetClasses'][0],
+        type: 'ASSET_CLASS'
+      });
+    }
+
+    if (user?.settings['filters.dataSource']) {
+      filters.push({
+        id: user.settings['filters.dataSource'],
+        type: 'DATA_SOURCE'
+      });
+    }
+
+    if (user?.settings['filters.symbol']) {
+      filters.push({
+        id: user.settings['filters.symbol'],
+        type: 'SYMBOL'
+      });
+    }
+
+    if (user?.settings['filters.tags']) {
+      filters.push({
+        id: user.settings['filters.tags'][0],
+        type: 'TAG'
+      });
+    }
+
+    return filters;
+  }
+
+  public hasFilters() {
+    return this.getFilters().length > 0;
+  }
+
   public remove() {
     this.setState({ user: null }, UserStoreActions.RemoveUser);
   }
@@ -53,6 +100,10 @@ export class UserService extends ObservableStore<UserStoreState> {
   private fetchUser(): Observable<User> {
     return this.http.get<any>('/api/v1/user').pipe(
       map((user) => {
+        if (user.dateOfFirstActivity) {
+          user.dateOfFirstActivity = parseISO(user.dateOfFirstActivity);
+        }
+
         if (user.settings?.retirementDate) {
           user.settings.retirementDate = parseISO(user.settings.retirementDate);
         }
@@ -67,15 +118,17 @@ export class UserService extends ObservableStore<UserStoreState> {
         ) {
           const dialogRef = this.dialog.open(SubscriptionInterstitialDialog, {
             autoFocus: false,
-            data: <SubscriptionInterstitialDialogParams>{},
-            height: this.deviceType === 'mobile' ? '97.5vh' : '80vh',
+            data: {
+              user
+            } as SubscriptionInterstitialDialogParams,
+            height: this.deviceType === 'mobile' ? '98vh' : '80vh',
             width: this.deviceType === 'mobile' ? '100vw' : '50rem'
           });
 
           dialogRef
             .afterClosed()
             .pipe(takeUntil(this.unsubscribeSubject))
-            .subscribe(() => {});
+            .subscribe();
         }
 
         return user;

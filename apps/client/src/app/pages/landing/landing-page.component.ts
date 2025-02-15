@@ -1,7 +1,8 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { Statistics } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { format } from 'date-fns';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject } from 'rxjs';
@@ -10,7 +11,8 @@ import { Subject } from 'rxjs';
   host: { class: 'page' },
   selector: 'gf-landing-page',
   styleUrls: ['./landing-page.scss'],
-  templateUrl: './landing-page.html'
+  templateUrl: './landing-page.html',
+  standalone: false
 })
 export class LandingPageComponent implements OnDestroy, OnInit {
   public countriesOfSubscribersMap: {
@@ -22,8 +24,8 @@ export class LandingPageComponent implements OnDestroy, OnInit {
   public hasPermissionForStatistics: boolean;
   public hasPermissionForSubscription: boolean;
   public hasPermissionToCreateUser: boolean;
-  public routerLinkAbout = ['/' + $localize`about`];
-  public routerLinkRegister = ['/' + $localize`register`];
+  public routerLinkAbout = ['/' + $localize`:snake-case:about`];
+  public routerLinkRegister = ['/' + $localize`:snake-case:register`];
   public statistics: Statistics;
   public testimonials = [
     {

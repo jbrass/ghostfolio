@@ -13,6 +13,7 @@ export class FeeRatioInitialInvestment extends Rule<Settings> {
     fees: number
   ) {
     super(exchangeRateDataService, {
+      key: FeeRatioInitialInvestment.name,
       name: 'Fee Ratio'
     });
 
@@ -25,10 +26,10 @@ export class FeeRatioInitialInvestment extends Rule<Settings> {
       ? this.fees / this.totalInvestment
       : 0;
 
-    if (feeRatio > ruleSettings.threshold) {
+    if (feeRatio > ruleSettings.thresholdMax) {
       return {
         evaluation: `The fees do exceed ${
-          ruleSettings.threshold * 100
+          ruleSettings.thresholdMax * 100
         }% of your initial investment (${(feeRatio * 100).toPrecision(3)}%)`,
         value: false
       };
@@ -36,22 +37,34 @@ export class FeeRatioInitialInvestment extends Rule<Settings> {
 
     return {
       evaluation: `The fees do not exceed ${
-        ruleSettings.threshold * 100
+        ruleSettings.thresholdMax * 100
       }% of your initial investment (${(feeRatio * 100).toPrecision(3)}%)`,
       value: true
     };
   }
 
-  public getSettings(aUserSettings: UserSettings): Settings {
+  public getConfiguration() {
     return {
-      baseCurrency: aUserSettings.baseCurrency,
-      isActive: true,
-      threshold: 0.01
+      threshold: {
+        max: 0.1,
+        min: 0,
+        step: 0.0025,
+        unit: '%'
+      },
+      thresholdMax: true
+    };
+  }
+
+  public getSettings({ baseCurrency, xRayRules }: UserSettings): Settings {
+    return {
+      baseCurrency,
+      isActive: xRayRules?.[this.getKey()].isActive ?? true,
+      thresholdMax: xRayRules?.[this.getKey()]?.thresholdMax ?? 0.01
     };
   }
 }
 
 interface Settings extends RuleSettings {
   baseCurrency: string;
-  threshold: number;
+  thresholdMax: number;
 }

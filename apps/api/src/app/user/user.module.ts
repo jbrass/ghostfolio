@@ -1,8 +1,10 @@
+import { OrderModule } from '@ghostfolio/api/app/order/order.module';
 import { SubscriptionModule } from '@ghostfolio/api/app/subscription/subscription.module';
 import { ConfigurationModule } from '@ghostfolio/api/services/configuration/configuration.module';
 import { PrismaModule } from '@ghostfolio/api/services/prisma/prisma.module';
 import { PropertyModule } from '@ghostfolio/api/services/property/property.module';
 import { TagModule } from '@ghostfolio/api/services/tag/tag.module';
+
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 
@@ -18,6 +20,7 @@ import { UserService } from './user.service';
       secret: process.env.JWT_SECRET_KEY,
       signOptions: { expiresIn: '30 days' }
     }),
+    OrderModule,
     PrismaModule,
     PropertyModule,
     SubscriptionModule,

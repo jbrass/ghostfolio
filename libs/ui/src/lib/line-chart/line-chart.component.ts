@@ -1,5 +1,19 @@
-import 'chartjs-adapter-date-fns';
+import {
+  getTooltipOptions,
+  getTooltipPositionerMapTop,
+  getVerticalHoverLinePlugin
+} from '@ghostfolio/common/chart-helper';
+import { primaryColorRgb, secondaryColorRgb } from '@ghostfolio/common/config';
+import {
+  getBackgroundColor,
+  getDateFormatString,
+  getLocale,
+  getTextColor
+} from '@ghostfolio/common/helper';
+import { LineChartItem } from '@ghostfolio/common/interfaces';
+import { ColorScheme } from '@ghostfolio/common/types';
 
+import { CommonModule } from '@angular/common';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -11,47 +25,36 @@ import {
   ViewChild
 } from '@angular/core';
 import {
-  getTooltipOptions,
-  getTooltipPositionerMapTop,
-  getVerticalHoverLinePlugin
-} from '@ghostfolio/common/chart-helper';
-import {
-  locale,
-  primaryColorRgb,
-  secondaryColorRgb
-} from '@ghostfolio/common/config';
-import {
-  getBackgroundColor,
-  getDateFormatString,
-  getTextColor
-} from '@ghostfolio/common/helper';
-import { LineChartItem } from '@ghostfolio/common/interfaces';
-import { ColorScheme } from '@ghostfolio/common/types';
-import {
   Chart,
   Filler,
+  LinearScale,
   LineController,
   LineElement,
-  LinearScale,
   PointElement,
   TimeScale,
-  Tooltip
+  Tooltip,
+  TooltipPosition
 } from 'chart.js';
+import 'chartjs-adapter-date-fns';
+import { NgxSkeletonLoaderModule } from 'ngx-skeleton-loader';
 
 @Component({
-  selector: 'gf-line-chart',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './line-chart.component.html',
-  styleUrls: ['./line-chart.component.scss']
+  imports: [CommonModule, NgxSkeletonLoaderModule],
+  selector: 'gf-line-chart',
+  styleUrls: ['./line-chart.component.scss'],
+  templateUrl: './line-chart.component.html'
 })
-export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
+export class GfLineChartComponent
+  implements AfterViewInit, OnChanges, OnDestroy
+{
   @Input() benchmarkDataItems: LineChartItem[] = [];
   @Input() benchmarkLabel = '';
   @Input() colorScheme: ColorScheme;
   @Input() currency: string;
   @Input() historicalDataItems: LineChartItem[];
   @Input() isAnimated = false;
-  @Input() locale: string;
+  @Input() locale = getLocale();
   @Input() showGradient = false;
   @Input() showLegend = false;
   @Input() showLoader = true;
@@ -82,7 +85,7 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       Tooltip
     );
 
-    Tooltip.positioners['top'] = (elements, position) =>
+    Tooltip.positioners['top'] = (_elements, position: TooltipPosition) =>
       getTooltipPositionerMapTop(this.chart, position);
   }
 
@@ -105,10 +108,6 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
 
         this.changeDetectorRef.markForCheck();
       });
-    }
-
-    if (!this.locale) {
-      this.locale = locale;
     }
   }
 
@@ -172,15 +171,14 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.chartCanvas) {
       if (this.chart) {
         this.chart.data = data;
-        this.chart.options.plugins.tooltip = <unknown>(
-          this.getTooltipPluginConfiguration()
-        );
+        this.chart.options.plugins.tooltip =
+          this.getTooltipPluginConfiguration() as unknown;
         this.chart.options.animation =
           this.isAnimated &&
-          <unknown>{
+          ({
             x: this.getAnimationConfigurationForAxis({ labels, axis: 'x' }),
             y: this.getAnimationConfigurationForAxis({ labels, axis: 'y' })
-          };
+          } as unknown);
         this.chart.update();
       } else {
         this.chart = new Chart(this.chartCanvas.nativeElement, {
@@ -188,10 +186,10 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
           options: {
             animation:
               this.isAnimated &&
-              <unknown>{
+              ({
                 x: this.getAnimationConfigurationForAxis({ labels, axis: 'x' }),
                 y: this.getAnimationConfigurationForAxis({ labels, axis: 'y' })
-              },
+              } as unknown),
             aspectRatio: 16 / 9,
             elements: {
               point: {
@@ -200,7 +198,7 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
               }
             },
             interaction: { intersect: false, mode: 'index' },
-            plugins: <unknown>{
+            plugins: {
               legend: {
                 align: 'start',
                 display: this.showLegend,
@@ -210,7 +208,7 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
               verticalHoverLine: {
                 color: `rgba(${getTextColor(this.colorScheme)}, 0.1)`
               }
-            },
+            } as unknown,
             scales: {
               x: {
                 border: {
@@ -325,7 +323,7 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
         unit: this.unit
       }),
       mode: 'index',
-      position: <unknown>'top',
+      position: 'top' as unknown,
       xAlign: 'center',
       yAlign: 'bottom'
     };

@@ -1,33 +1,32 @@
+import { getLocale, getNumberFormatGroup } from '@ghostfolio/common/helper';
+
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   Input,
   OnChanges,
-  OnDestroy,
-  OnInit
+  OnDestroy
 } from '@angular/core';
-import { getNumberFormatGroup } from '@ghostfolio/common/helper';
 import svgMap from 'svgmap';
 
 @Component({
   selector: 'gf-world-map-chart',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './world-map-chart.component.html',
-  styleUrls: ['./world-map-chart.component.scss']
+  styleUrls: ['./world-map-chart.component.scss'],
+  standalone: false
 })
-export class WorldMapChartComponent implements OnChanges, OnDestroy, OnInit {
+export class WorldMapChartComponent implements OnChanges, OnDestroy {
   @Input() countries: { [code: string]: { name?: string; value: number } };
   @Input() format: string;
   @Input() isInPercent = false;
-  @Input() locale: string;
+  @Input() locale = getLocale();
 
   public isLoading = true;
   public svgMapElement;
 
   public constructor(private changeDetectorRef: ChangeDetectorRef) {}
-
-  public ngOnInit() {}
 
   public ngOnChanges() {
     // Create a copy before manipulating countries object

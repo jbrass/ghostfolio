@@ -1,25 +1,24 @@
+import { personalFinanceTools } from '@ghostfolio/common/personal-finance-tools';
+
 import { Component, OnDestroy } from '@angular/core';
 import { Subject } from 'rxjs';
-
-import { products } from './products';
 
 @Component({
   host: { class: 'page' },
   selector: 'gf-personal-finance-tools-page',
   styleUrls: ['./personal-finance-tools-page.scss'],
-  templateUrl: './personal-finance-tools-page.html'
+  templateUrl: './personal-finance-tools-page.html',
+  standalone: false
 })
 export class PersonalFinanceToolsPageComponent implements OnDestroy {
   public pathAlternativeTo = $localize`open-source-alternative-to` + '-';
   public pathResources = '/' + $localize`resources`;
-  public products = products.filter(({ key }) => {
-    return key !== 'ghostfolio';
+  public personalFinanceTools = personalFinanceTools.sort((a, b) => {
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
   });
-  public routerLinkAbout = ['/' + $localize`about`];
+  public routerLinkAbout = ['/' + $localize`:snake-case:about`];
 
   private unsubscribeSubject = new Subject<void>();
-
-  public constructor() {}
 
   public ngOnDestroy() {
     this.unsubscribeSubject.next();

@@ -6,9 +6,8 @@ import { RouterModule } from '@angular/router';
   host: { class: 'page' },
   imports: [MatButtonModule, RouterModule],
   selector: 'gf-hacktoberfest-2023-page',
-  standalone: true,
   templateUrl: './hacktoberfest-2023-page.html'
 })
 export class Hacktoberfest2023PageComponent {
-  public routerLinkAbout = ['/' + $localize`about`];
+  public routerLinkAbout = ['/' + $localize`:snake-case:about`];
 }

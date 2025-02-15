@@ -1,11 +1,9 @@
 import { Injectable } from '@angular/core';
-import Big from 'big.js';
+import { Big } from 'big.js';
 
 @Injectable()
 export class FireCalculatorService {
   private readonly COMPOUND_PERIOD = 12;
-
-  public constructor() {}
 
   public calculateCompoundInterest({
     P,
@@ -52,7 +50,7 @@ export class FireCalculatorService {
     r: number;
     totalAmount: number;
   }) {
-    if (r == 0) {
+    if (r === 0) {
       // No compound interest
       return (totalAmount - P) / PMT;
     } else if (totalAmount <= P) {

@@ -1,4 +1,20 @@
-import 'chartjs-adapter-date-fns';
+import {
+  getTooltipOptions,
+  getTooltipPositionerMapTop,
+  getVerticalHoverLinePlugin,
+  transformTickToAbbreviation
+} from '@ghostfolio/common/chart-helper';
+import { primaryColorRgb, secondaryColorRgb } from '@ghostfolio/common/config';
+import {
+  getBackgroundColor,
+  getDateFormatString,
+  getLocale,
+  getTextColor,
+  parseDate
+} from '@ghostfolio/common/helper';
+import { LineChartItem } from '@ghostfolio/common/interfaces';
+import { InvestmentItem } from '@ghostfolio/common/interfaces/investment-item.interface';
+import { ColorScheme, GroupBy } from '@ghostfolio/common/types';
 
 import {
   ChangeDetectionStrategy,
@@ -9,56 +25,39 @@ import {
   ViewChild
 } from '@angular/core';
 import {
-  getTooltipOptions,
-  getTooltipPositionerMapTop,
-  getVerticalHoverLinePlugin,
-  transformTickToAbbreviation
-} from '@ghostfolio/common/chart-helper';
-import { primaryColorRgb, secondaryColorRgb } from '@ghostfolio/common/config';
-import {
-  DATE_FORMAT,
-  getBackgroundColor,
-  getDateFormatString,
-  getTextColor,
-  parseDate
-} from '@ghostfolio/common/helper';
-import { LineChartItem } from '@ghostfolio/common/interfaces';
-import { InvestmentItem } from '@ghostfolio/common/interfaces/investment-item.interface';
-import { ColorScheme, DateRange, GroupBy } from '@ghostfolio/common/types';
-import {
   BarController,
   BarElement,
   Chart,
   ChartData,
+  LinearScale,
   LineController,
   LineElement,
-  LinearScale,
   PointElement,
   TimeScale,
-  Tooltip
+  Tooltip,
+  TooltipPosition
 } from 'chart.js';
+import 'chartjs-adapter-date-fns';
 import annotationPlugin from 'chartjs-plugin-annotation';
-import { addDays, format, isAfter, parseISO, subDays } from 'date-fns';
-import { last } from 'lodash';
+import { isAfter } from 'date-fns';
 
 @Component({
   selector: 'gf-investment-chart',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './investment-chart.component.html',
-  styleUrls: ['./investment-chart.component.scss']
+  styleUrls: ['./investment-chart.component.scss'],
+  standalone: false
 })
 export class InvestmentChartComponent implements OnChanges, OnDestroy {
   @Input() benchmarkDataItems: InvestmentItem[] = [];
   @Input() benchmarkDataLabel = '';
   @Input() colorScheme: ColorScheme;
   @Input() currency: string;
-  @Input() daysInMarket: number;
   @Input() groupBy: GroupBy;
   @Input() historicalDataItems: LineChartItem[] = [];
   @Input() isInPercent = false;
   @Input() isLoading = false;
-  @Input() locale: string;
-  @Input() range: DateRange = 'max';
+  @Input() locale = getLocale();
   @Input() savingsRate = 0;
 
   @ViewChild('chartCanvas') chartCanvas;
@@ -80,7 +79,7 @@ export class InvestmentChartComponent implements OnChanges, OnDestroy {
       Tooltip
     );
 
-    Tooltip.positioners['top'] = (elements, position) =>
+    Tooltip.positioners['top'] = (_elements, position: TooltipPosition) =>
       getTooltipPositionerMapTop(this.chart, position);
   }
 
@@ -103,47 +102,7 @@ export class InvestmentChartComponent implements OnChanges, OnDestroy {
       Object.assign({}, item)
     );
 
-    if (!this.groupBy && this.investments?.length > 0) {
-      let date: string;
-
-      if (this.range === 'max') {
-        // Extend chart by 5% of days in market (before)
-        date = format(
-          subDays(
-            parseISO(this.investments[0].date),
-            this.daysInMarket * 0.05 || 90
-          ),
-          DATE_FORMAT
-        );
-        this.investments.unshift({
-          date,
-          investment: 0
-        });
-        this.values.unshift({
-          date,
-          value: 0
-        });
-      }
-
-      // Extend chart by 5% of days in market (after)
-      date = format(
-        addDays(
-          parseDate(last(this.investments).date),
-          this.daysInMarket * 0.05 || 90
-        ),
-        DATE_FORMAT
-      );
-      this.investments.push({
-        date,
-        investment: last(this.investments).investment
-      });
-      this.values.push({
-        date,
-        value: last(this.values).value
-      });
-    }
-
-    const chartData: ChartData<'line'> = {
+    const chartData: ChartData<'bar' | 'line'> = {
       labels: this.historicalDataItems.map(({ date }) => {
         return parseDate(date);
       }),
@@ -196,15 +155,8 @@ export class InvestmentChartComponent implements OnChanges, OnDestroy {
     if (this.chartCanvas) {
       if (this.chart) {
         this.chart.data = chartData;
-        this.chart.options.plugins.tooltip = <unknown>(
-          this.getTooltipPluginConfiguration()
-        );
-        this.chart.options.scales.x.min = this.daysInMarket
-          ? subDays(
-              new Date().setHours(0, 0, 0, 0),
-              this.daysInMarket
-            ).toISOString()
-          : undefined;
+        this.chart.options.plugins.tooltip =
+          this.getTooltipPluginConfiguration() as unknown;
 
         if (
           this.savingsRate &&
@@ -234,7 +186,7 @@ export class InvestmentChartComponent implements OnChanges, OnDestroy {
             },
             interaction: { intersect: false, mode: 'index' },
             maintainAspectRatio: true,
-            plugins: <unknown>{
+            plugins: {
               annotation: {
                 annotations: {
                   savingsRate: this.savingsRate
@@ -275,7 +227,7 @@ export class InvestmentChartComponent implements OnChanges, OnDestroy {
               verticalHoverLine: {
                 color: `rgba(${getTextColor(this.colorScheme)}, 0.1)`
               }
-            },
+            } as unknown,
             responsive: true,
             scales: {
               x: {
@@ -287,10 +239,6 @@ export class InvestmentChartComponent implements OnChanges, OnDestroy {
                 grid: {
                   display: false
                 },
-                min: this.daysInMarket
-                  ? subDays(new Date(), this.daysInMarket).toISOString()
-                  : undefined,
-                suggestedMax: new Date().toISOString(),
                 type: 'time',
                 time: {
                   tooltipFormat: getDateFormatString(this.locale),
@@ -346,7 +294,7 @@ export class InvestmentChartComponent implements OnChanges, OnDestroy {
         unit: this.isInPercent ? '%' : undefined
       }),
       mode: 'index',
-      position: <unknown>'top',
+      position: 'top' as unknown,
       xAlign: 'center',
       yAlign: 'bottom'
     };

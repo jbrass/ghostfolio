@@ -1,13 +1,19 @@
+import { UserService } from '@ghostfolio/api/app/user/user.service';
 import {
+  DATA_GATHERING_QUEUE_PRIORITY_LOW,
   GATHER_ASSET_PROFILE_PROCESS,
-  GATHER_ASSET_PROFILE_PROCESS_OPTIONS
+  GATHER_ASSET_PROFILE_PROCESS_OPTIONS,
+  PROPERTY_IS_DATA_GATHERING_ENABLED
 } from '@ghostfolio/common/config';
 import { getAssetProfileIdentifier } from '@ghostfolio/common/helper';
+
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
-import { DataGatheringService } from './data-gathering/data-gathering.service';
+import { ConfigurationService } from './configuration/configuration.service';
 import { ExchangeRateDataService } from './exchange-rate-data/exchange-rate-data.service';
+import { PropertyService } from './property/property.service';
+import { DataGatheringService } from './queues/data-gathering/data-gathering.service';
 import { TwitterBotService } from './twitter-bot/twitter-bot.service';
 
 @Injectable()
@@ -15,14 +21,19 @@ export class CronService {
   private static readonly EVERY_SUNDAY_AT_LUNCH_TIME = '0 12 * * 0';
 
   public constructor(
+    private readonly configurationService: ConfigurationService,
     private readonly dataGatheringService: DataGatheringService,
     private readonly exchangeRateDataService: ExchangeRateDataService,
-    private readonly twitterBotService: TwitterBotService
+    private readonly propertyService: PropertyService,
+    private readonly twitterBotService: TwitterBotService,
+    private readonly userService: UserService
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
   public async runEveryHour() {
-    await this.dataGatheringService.gather7Days();
+    if (await this.isDataGatheringEnabled()) {
+      await this.dataGatheringService.gather7Days();
+    }
   }
 
   @Cron(CronExpression.EVERY_12_HOURS)
@@ -35,24 +46,43 @@ export class CronService {
     this.twitterBotService.tweetFearAndGreedIndex();
   }
 
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  public async runEveryDayAtMidnight() {
+    if (this.configurationService.get('ENABLE_FEATURE_SUBSCRIPTION')) {
+      this.userService.resetAnalytics();
+    }
+  }
+
   @Cron(CronService.EVERY_SUNDAY_AT_LUNCH_TIME)
   public async runEverySundayAtTwelvePm() {
-    const uniqueAssets = await this.dataGatheringService.getUniqueAssets();
+    if (await this.isDataGatheringEnabled()) {
+      const assetProfileIdentifiers =
+        await this.dataGatheringService.getAllAssetProfileIdentifiers();
 
-    await this.dataGatheringService.addJobsToQueue(
-      uniqueAssets.map(({ dataSource, symbol }) => {
-        return {
-          data: {
-            dataSource,
-            symbol
-          },
-          name: GATHER_ASSET_PROFILE_PROCESS,
-          opts: {
-            ...GATHER_ASSET_PROFILE_PROCESS_OPTIONS,
-            jobId: getAssetProfileIdentifier({ dataSource, symbol })
-          }
-        };
-      })
-    );
+      await this.dataGatheringService.addJobsToQueue(
+        assetProfileIdentifiers.map(({ dataSource, symbol }) => {
+          return {
+            data: {
+              dataSource,
+              symbol
+            },
+            name: GATHER_ASSET_PROFILE_PROCESS,
+            opts: {
+              ...GATHER_ASSET_PROFILE_PROCESS_OPTIONS,
+              jobId: getAssetProfileIdentifier({ dataSource, symbol }),
+              priority: DATA_GATHERING_QUEUE_PRIORITY_LOW
+            }
+          };
+        })
+      );
+    }
+  }
+
+  private async isDataGatheringEnabled() {
+    return (await this.propertyService.getByKey(
+      PROPERTY_IS_DATA_GATHERING_ENABLED
+    )) === false
+      ? false
+      : true;
   }
 }

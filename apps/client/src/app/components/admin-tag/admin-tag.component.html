@@ -34,6 +34,20 @@
           </td>
         </ng-container>
 
+        <ng-container matColumnDef="userId">
+          <th
+            *matHeaderCellDef
+            class="px-1"
+            mat-header-cell
+            mat-sort-header="userId"
+          >
+            <ng-container i18n>User</ng-container>
+          </th>
+          <td *matCellDef="let element" class="px-1" mat-cell>
+            <span class="text-monospace">{{ element.userId }}</span>
+          </td>
+        </ng-container>
+
         <ng-container matColumnDef="activities">
           <th
             *matHeaderCellDef
@@ -48,7 +62,7 @@
           </td>
         </ng-container>
 
-        <ng-container matColumnDef="actions">
+        <ng-container matColumnDef="actions" stickyEnd>
           <th
             *matHeaderCellDef
             class="px-1 text-center"
@@ -62,16 +76,25 @@
               [matMenuTriggerFor]="tagMenu"
               (click)="$event.stopPropagation()"
             >
-              <ion-icon name="ellipsis-horizontal"></ion-icon>
+              <ion-icon name="ellipsis-horizontal" />
             </button>
             <mat-menu #tagMenu="matMenu" xPosition="before">
               <button mat-menu-item (click)="onUpdateTag(element)">
-                <ion-icon class="mr-2" name="create-outline"></ion-icon>
-                <span i18n>Edit</span>
+                <span class="align-items-center d-flex">
+                  <ion-icon class="mr-2" name="create-outline" />
+                  <span i18n>Edit</span>
+                </span>
               </button>
-              <button mat-menu-item (click)="onDeleteTag(element.id)">
-                <ion-icon class="mr-2" name="trash-outline"></ion-icon>
-                <span i18n>Delete</span>
+              <hr class="m-0" />
+              <button
+                mat-menu-item
+                [disabled]="element.activityCount > 0"
+                (click)="onDeleteTag(element.id)"
+              >
+                <span class="align-items-center d-flex">
+                  <ion-icon class="mr-2" name="trash-outline" />
+                  <span i18n>Delete</span>
+                </span>
               </button>
             </mat-menu>
           </td>

@@ -1,27 +1,34 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { Injectable } from '@angular/core';
 import { UpdateAssetProfileDto } from '@ghostfolio/api/app/admin/update-asset-profile.dto';
-import { UpdateMarketDataDto } from '@ghostfolio/api/app/admin/update-market-data.dto';
 import { CreatePlatformDto } from '@ghostfolio/api/app/platform/create-platform.dto';
 import { UpdatePlatformDto } from '@ghostfolio/api/app/platform/update-platform.dto';
-import { CreateTagDto } from '@ghostfolio/api/app/tag/create-tag.dto';
-import { UpdateTagDto } from '@ghostfolio/api/app/tag/update-tag.dto';
 import { IDataProviderHistoricalResponse } from '@ghostfolio/api/services/interfaces/interfaces';
+import {
+  HEADER_KEY_SKIP_INTERCEPTOR,
+  HEADER_KEY_TOKEN,
+  PROPERTY_API_KEY_GHOSTFOLIO
+} from '@ghostfolio/common/config';
+import { DEFAULT_PAGE_SIZE } from '@ghostfolio/common/config';
 import { DATE_FORMAT } from '@ghostfolio/common/helper';
 import {
+  AssetProfileIdentifier,
   AdminData,
   AdminJobs,
   AdminMarketData,
-  AdminMarketDataDetails,
+  AdminUsers,
+  DataProviderGhostfolioStatusResponse,
   EnhancedSymbolProfile,
-  Filter,
-  UniqueAsset
+  Filter
 } from '@ghostfolio/common/interfaces';
-import { DataSource, MarketData, Platform, Prisma, Tag } from '@prisma/client';
-import { JobStatus } from 'bull';
-import { format, parseISO } from 'date-fns';
-import { Observable, map } from 'rxjs';
 
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { SortDirection } from '@angular/material/sort';
+import { DataSource, MarketData, Platform } from '@prisma/client';
+import { JobStatus } from 'bull';
+import { format } from 'date-fns';
+import { switchMap } from 'rxjs';
+
+import { environment } from '../../environments/environment';
 import { DataService } from './data.service';
 
 @Injectable({
@@ -33,7 +40,7 @@ export class AdminService {
     private http: HttpClient
   ) {}
 
-  public addAssetProfile({ dataSource, symbol }: UniqueAsset) {
+  public addAssetProfile({ dataSource, symbol }: AssetProfileIdentifier) {
     return this.http.post<void>(
       `/api/v1/admin/profile-data/${dataSource}/${symbol}`,
       null
@@ -60,14 +67,14 @@ export class AdminService {
     return this.http.delete<void>(`/api/v1/platform/${aId}`);
   }
 
-  public deleteProfileData({ dataSource, symbol }: UniqueAsset) {
+  public deleteProfileData({ dataSource, symbol }: AssetProfileIdentifier) {
     return this.http.delete<void>(
       `/api/v1/admin/profile-data/${dataSource}/${symbol}`
     );
   }
 
-  public deleteTag(aId: string) {
-    return this.http.delete<void>(`/api/v1/tag/${aId}`);
+  public executeJob(aId: string) {
+    return this.http.get<void>(`/api/v1/admin/queue/job/${aId}/execute`);
   }
 
   public fetchAdminData() {
@@ -84,7 +91,7 @@ export class AdminService {
     filters?: Filter[];
     skip?: number;
     sortColumn?: string;
-    sortDirection?: Prisma.SortOrder;
+    sortDirection?: SortDirection;
     take: number;
   }) {
     let params = this.dataService.buildFiltersAsQueryParams({ filters });
@@ -110,23 +117,20 @@ export class AdminService {
     });
   }
 
-  public fetchAdminMarketDataBySymbol({
-    dataSource,
-    symbol
-  }: {
-    dataSource: DataSource;
-    symbol: string;
-  }): Observable<AdminMarketDataDetails> {
-    return this.http
-      .get<any>(`/api/v1/admin/market-data/${dataSource}/${symbol}`)
-      .pipe(
-        map((data) => {
-          for (const item of data.marketData) {
-            item.date = parseISO(item.date);
-          }
-          return data;
-        })
-      );
+  public fetchGhostfolioDataProviderStatus() {
+    return this.fetchAdminData().pipe(
+      switchMap(({ settings }) => {
+        const headers = new HttpHeaders({
+          [HEADER_KEY_SKIP_INTERCEPTOR]: 'true',
+          [HEADER_KEY_TOKEN]: `Api-Key ${settings[PROPERTY_API_KEY_GHOSTFOLIO]}`
+        });
+
+        return this.http.get<DataProviderGhostfolioStatusResponse>(
+          `${environment.production ? 'https://ghostfol.io' : ''}/api/v2/data-providers/ghostfolio/status`,
+          { headers }
+        );
+      })
+    );
   }
 
   public fetchJobs({ status }: { status?: JobStatus[] }) {
@@ -145,8 +149,19 @@ export class AdminService {
     return this.http.get<Platform[]>('/api/v1/platform');
   }
 
-  public fetchTags() {
-    return this.http.get<Tag[]>('/api/v1/tag');
+  public fetchUsers({
+    skip,
+    take = DEFAULT_PAGE_SIZE
+  }: {
+    skip?: number;
+    take?: number;
+  }) {
+    let params = new HttpParams();
+
+    params = params.append('skip', skip);
+    params = params.append('take', take);
+
+    return this.http.get<AdminUsers>('/api/v1/admin/user', { params });
   }
 
   public gather7Days() {
@@ -161,7 +176,10 @@ export class AdminService {
     return this.http.post<void>('/api/v1/admin/gather/profile-data', {});
   }
 
-  public gatherProfileDataBySymbol({ dataSource, symbol }: UniqueAsset) {
+  public gatherProfileDataBySymbol({
+    dataSource,
+    symbol
+  }: AssetProfileIdentifier) {
     return this.http.post<void>(
       `/api/v1/admin/gather/profile-data/${dataSource}/${symbol}`,
       {}
@@ -172,7 +190,7 @@ export class AdminService {
     dataSource,
     date,
     symbol
-  }: UniqueAsset & {
+  }: AssetProfileIdentifier & {
     date?: Date;
   }) {
     let url = `/api/v1/admin/gather/${dataSource}/${symbol}`;
@@ -186,59 +204,51 @@ export class AdminService {
 
   public fetchSymbolForDate({
     dataSource,
-    date,
+    dateString,
     symbol
   }: {
     dataSource: DataSource;
-    date: Date;
+    dateString: string;
     symbol: string;
   }) {
-    const url = `/api/v1/symbol/${dataSource}/${symbol}/${format(
-      date,
-      DATE_FORMAT
-    )}`;
+    const url = `/api/v1/symbol/${dataSource}/${symbol}/${dateString}`;
 
     return this.http.get<IDataProviderHistoricalResponse>(url);
   }
 
   public patchAssetProfile({
+    assetClass,
+    assetSubClass,
     comment,
+    countries,
+    currency,
     dataSource,
+    name,
     scraperConfiguration,
+    sectors,
     symbol,
-    symbolMapping
-  }: UniqueAsset & UpdateAssetProfileDto) {
+    symbolMapping,
+    url
+  }: AssetProfileIdentifier & UpdateAssetProfileDto) {
     return this.http.patch<EnhancedSymbolProfile>(
       `/api/v1/admin/profile-data/${dataSource}/${symbol}`,
-      { comment, scraperConfiguration, symbolMapping }
+      {
+        assetClass,
+        assetSubClass,
+        comment,
+        countries,
+        currency,
+        name,
+        scraperConfiguration,
+        sectors,
+        symbolMapping,
+        url
+      }
     );
   }
 
   public postPlatform(aPlatform: CreatePlatformDto) {
     return this.http.post<Platform>(`/api/v1/platform`, aPlatform);
-  }
-
-  public postTag(aTag: CreateTagDto) {
-    return this.http.post<Tag>(`/api/v1/tag`, aTag);
-  }
-
-  public putMarketData({
-    dataSource,
-    date,
-    marketData,
-    symbol
-  }: {
-    dataSource: DataSource;
-    date: Date;
-    marketData: UpdateMarketDataDto;
-    symbol: string;
-  }) {
-    const url = `/api/v1/admin/market-data/${dataSource}/${symbol}/${format(
-      date,
-      DATE_FORMAT
-    )}`;
-
-    return this.http.put<MarketData>(url, marketData);
   }
 
   public putPlatform(aPlatform: UpdatePlatformDto) {
@@ -248,7 +258,16 @@ export class AdminService {
     );
   }
 
-  public putTag(aTag: UpdateTagDto) {
-    return this.http.put<Tag>(`/api/v1/tag/${aTag.id}`, aTag);
+  public testMarketData({
+    dataSource,
+    scraperConfiguration,
+    symbol
+  }: AssetProfileIdentifier & UpdateAssetProfileDto['scraperConfiguration']) {
+    return this.http.post<any>(
+      `/api/v1/admin/market-data/${dataSource}/${symbol}/test`,
+      {
+        scraperConfiguration
+      }
+    );
   }
 }

@@ -1,14 +1,16 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
 import { Statistics, User } from '@ghostfolio/common/interfaces';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { Subject, takeUntil } from 'rxjs';
 
 @Component({
   host: { class: 'page' },
   selector: 'gf-open-page',
   styleUrls: ['./open-page.scss'],
-  templateUrl: './open-page.html'
+  templateUrl: './open-page.html',
+  standalone: false
 })
 export class OpenPageComponent implements OnDestroy, OnInit {
   public statistics: Statistics;

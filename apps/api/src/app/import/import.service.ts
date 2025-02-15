@@ -8,31 +8,36 @@ import {
 import { OrderService } from '@ghostfolio/api/app/order/order.service';
 import { PlatformService } from '@ghostfolio/api/app/platform/platform.service';
 import { PortfolioService } from '@ghostfolio/api/app/portfolio/portfolio.service';
-import { DataGatheringService } from '@ghostfolio/api/services/data-gathering/data-gathering.service';
+import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
 import { DataProviderService } from '@ghostfolio/api/services/data-provider/data-provider.service';
 import { ExchangeRateDataService } from '@ghostfolio/api/services/exchange-rate-data/exchange-rate-data.service';
+import { DataGatheringService } from '@ghostfolio/api/services/queues/data-gathering/data-gathering.service';
 import { SymbolProfileService } from '@ghostfolio/api/services/symbol-profile/symbol-profile.service';
+import { DATA_GATHERING_QUEUE_PRIORITY_HIGH } from '@ghostfolio/common/config';
 import {
   DATE_FORMAT,
   getAssetProfileIdentifier,
   parseDate
 } from '@ghostfolio/common/helper';
-import { UniqueAsset } from '@ghostfolio/common/interfaces';
+import { AssetProfileIdentifier } from '@ghostfolio/common/interfaces';
 import {
   AccountWithPlatform,
-  OrderWithAccount
+  OrderWithAccount,
+  UserWithSettings
 } from '@ghostfolio/common/types';
+
 import { Injectable } from '@nestjs/common';
 import { DataSource, Prisma, SymbolProfile } from '@prisma/client';
-import Big from 'big.js';
-import { endOfToday, format, isAfter, isSameDay, parseISO } from 'date-fns';
-import { uniqBy } from 'lodash';
+import { Big } from 'big.js';
+import { endOfToday, format, isAfter, isSameSecond, parseISO } from 'date-fns';
+import { isNumber, uniqBy } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class ImportService {
   public constructor(
     private readonly accountService: AccountService,
+    private readonly configurationService: ConfigurationService,
     private readonly dataGatheringService: DataGatheringService,
     private readonly dataProviderService: DataProviderService,
     private readonly exchangeRateDataService: ExchangeRateDataService,
@@ -46,7 +51,7 @@ export class ImportService {
     dataSource,
     symbol,
     userCurrency
-  }: UniqueAsset & { userCurrency: string }): Promise<Activity[]> {
+  }: AssetProfileIdentifier & { userCurrency: string }): Promise<Activity[]> {
     try {
       const { firstBuyDate, historicalData, orders } =
         await this.portfolioService.getPosition(dataSource, undefined, symbol);
@@ -67,63 +72,74 @@ export class ImportService {
         })
       ]);
 
-      const accounts = orders.map((order) => {
-        return order.Account;
-      });
+      const accounts = orders
+        .filter(({ Account }) => {
+          return !!Account;
+        })
+        .map(({ Account }) => {
+          return Account;
+        });
 
       const Account = this.isUniqueAccount(accounts) ? accounts[0] : undefined;
 
-      return Object.entries(dividends).map(([dateString, { marketPrice }]) => {
-        const quantity =
-          historicalData.find((historicalDataItem) => {
-            return historicalDataItem.date === dateString;
-          })?.quantity ?? 0;
+      return await Promise.all(
+        Object.entries(dividends).map(async ([dateString, { marketPrice }]) => {
+          const quantity =
+            historicalData.find((historicalDataItem) => {
+              return historicalDataItem.date === dateString;
+            })?.quantity ?? 0;
 
-        const value = new Big(quantity).mul(marketPrice).toNumber();
+          const value = new Big(quantity).mul(marketPrice).toNumber();
 
-        const isDuplicate = orders.some((activity) => {
-          return (
-            activity.SymbolProfile.currency === assetProfile.currency &&
-            activity.SymbolProfile.dataSource === assetProfile.dataSource &&
-            isSameDay(activity.date, parseDate(dateString)) &&
-            activity.quantity === quantity &&
-            activity.SymbolProfile.symbol === assetProfile.symbol &&
-            activity.type === 'DIVIDEND' &&
-            activity.unitPrice === marketPrice
-          );
-        });
+          const date = parseDate(dateString);
+          const isDuplicate = orders.some((activity) => {
+            return (
+              activity.accountId === Account?.id &&
+              activity.SymbolProfile.currency === assetProfile.currency &&
+              activity.SymbolProfile.dataSource === assetProfile.dataSource &&
+              isSameSecond(activity.date, date) &&
+              activity.quantity === quantity &&
+              activity.SymbolProfile.symbol === assetProfile.symbol &&
+              activity.type === 'DIVIDEND' &&
+              activity.unitPrice === marketPrice
+            );
+          });
 
-        const error: ActivityError = isDuplicate
-          ? { code: 'IS_DUPLICATE' }
-          : undefined;
+          const error: ActivityError = isDuplicate
+            ? { code: 'IS_DUPLICATE' }
+            : undefined;
 
-        return {
-          Account,
-          error,
-          quantity,
-          value,
-          accountId: Account?.id,
-          accountUserId: undefined,
-          comment: undefined,
-          createdAt: undefined,
-          date: parseDate(dateString),
-          fee: 0,
-          feeInBaseCurrency: 0,
-          id: assetProfile.id,
-          isDraft: false,
-          SymbolProfile: <SymbolProfile>(<unknown>assetProfile),
-          symbolProfileId: assetProfile.id,
-          type: 'DIVIDEND',
-          unitPrice: marketPrice,
-          updatedAt: undefined,
-          userId: Account?.userId,
-          valueInBaseCurrency: this.exchangeRateDataService.toCurrency(
+          return {
+            Account,
+            date,
+            error,
+            quantity,
             value,
-            assetProfile.currency,
-            userCurrency
-          )
-        };
-      });
+            accountId: Account?.id,
+            accountUserId: undefined,
+            comment: undefined,
+            currency: undefined,
+            createdAt: undefined,
+            fee: 0,
+            feeInBaseCurrency: 0,
+            id: assetProfile.id,
+            isDraft: false,
+            SymbolProfile: assetProfile,
+            symbolProfileId: assetProfile.id,
+            type: 'DIVIDEND',
+            unitPrice: marketPrice,
+            updatedAt: undefined,
+            userId: Account?.userId,
+            valueInBaseCurrency:
+              await this.exchangeRateDataService.toCurrencyAtDate(
+                value,
+                assetProfile.currency,
+                userCurrency,
+                date
+              )
+          };
+        })
+      );
     } catch {
       return [];
     }
@@ -134,17 +150,16 @@ export class ImportService {
     activitiesDto,
     isDryRun = false,
     maxActivitiesToImport,
-    userCurrency,
-    userId
+    user
   }: {
     accountsDto: Partial<CreateAccountDto>[];
     activitiesDto: Partial<CreateOrderDto>[];
     isDryRun?: boolean;
     maxActivitiesToImport: number;
-    userCurrency: string;
-    userId: string;
+    user: UserWithSettings;
   }): Promise<Activity[]> {
     const accountIdMapping: { [oldAccountId: string]: string } = {};
+    const userCurrency = user.Settings.settings.baseCurrency;
 
     if (!isDryRun && accountsDto?.length) {
       const [existingAccounts, existingPlatforms] = await Promise.all([
@@ -167,7 +182,7 @@ export class ImportService {
         );
 
         // If there is no account or if the account belongs to a different user then create a new account
-        if (!accountWithSameId || accountWithSameId.userId !== userId) {
+        if (!accountWithSameId || accountWithSameId.userId !== user.id) {
           let oldAccountId: string;
           const platformId = account.platformId;
 
@@ -180,7 +195,7 @@ export class ImportService {
 
           let accountObject: Prisma.AccountCreateInput = {
             ...account,
-            User: { connect: { id: userId } }
+            User: { connect: { id: user.id } }
           };
 
           if (
@@ -196,7 +211,7 @@ export class ImportService {
 
           const newAccount = await this.accountService.createAccount(
             accountObject,
-            userId
+            user.id
           );
 
           // Store the new to old account ID mappings for updating activities
@@ -209,7 +224,7 @@ export class ImportService {
 
     for (const activity of activitiesDto) {
       if (!activity.dataSource) {
-        if (activity.type === 'ITEM' || activity.type === 'LIABILITY') {
+        if (['FEE', 'INTEREST', 'ITEM', 'LIABILITY'].includes(activity.type)) {
           activity.dataSource = DataSource.MANUAL;
         } else {
           activity.dataSource =
@@ -227,15 +242,17 @@ export class ImportService {
 
     const assetProfiles = await this.validateActivities({
       activitiesDto,
-      maxActivitiesToImport
+      maxActivitiesToImport,
+      user
     });
 
     const activitiesExtendedWithErrors = await this.extendActivitiesWithErrors({
       activitiesDto,
-      userId
+      userCurrency,
+      userId: user.id
     });
 
-    const accounts = (await this.accountService.getAccounts(userId)).map(
+    const accounts = (await this.accountService.getAccounts(user.id)).map(
       ({ id, name }) => {
         return { id, name };
       }
@@ -249,20 +266,18 @@ export class ImportService {
 
     const activities: Activity[] = [];
 
-    for (let [
-      index,
-      {
-        accountId,
-        comment,
-        date,
-        error,
-        fee,
-        quantity,
-        SymbolProfile,
-        type,
-        unitPrice
-      }
-    ] of activitiesExtendedWithErrors.entries()) {
+    for (const [index, activity] of activitiesExtendedWithErrors.entries()) {
+      const accountId = activity.accountId;
+      const comment = activity.comment;
+      const currency = activity.currency;
+      const date = activity.date;
+      const error = activity.error;
+      let fee = activity.fee;
+      const quantity = activity.quantity;
+      const SymbolProfile = activity.SymbolProfile;
+      const type = activity.type;
+      let unitPrice = activity.unitPrice;
+
       const assetProfile = assetProfiles[
         getAssetProfileIdentifier({
           dataSource: SymbolProfile.dataSource,
@@ -278,8 +293,11 @@ export class ImportService {
         assetSubClass,
         countries,
         createdAt,
-        currency,
         dataSource,
+        figi,
+        figiComposite,
+        figiShareClass,
+        holdings,
         id,
         isin,
         name,
@@ -310,7 +328,7 @@ export class ImportService {
           date
         );
 
-        if (!unitPrice) {
+        if (!isNumber(unitPrice)) {
           throw new Error(
             `activities.${index} historical exchange rate at ${format(
               date,
@@ -332,12 +350,13 @@ export class ImportService {
       if (isDryRun) {
         order = {
           comment,
+          currency,
           date,
           fee,
           quantity,
           type,
           unitPrice,
-          userId,
+          Account: validatedAccount,
           accountId: validatedAccount?.id,
           accountUserId: undefined,
           createdAt: new Date(),
@@ -348,8 +367,11 @@ export class ImportService {
             assetSubClass,
             countries,
             createdAt,
-            currency,
             dataSource,
+            figi,
+            figiComposite,
+            figiShareClass,
+            holdings,
             id,
             isin,
             name,
@@ -359,11 +381,13 @@ export class ImportService {
             symbolMapping,
             updatedAt,
             url,
-            comment: assetProfile.comment
+            comment: assetProfile.comment,
+            currency: assetProfile.currency,
+            userId: dataSource === 'MANUAL' ? user.id : undefined
           },
-          Account: validatedAccount,
           symbolProfileId: undefined,
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          userId: user.id
         };
       } else {
         if (error) {
@@ -377,14 +401,14 @@ export class ImportService {
           quantity,
           type,
           unitPrice,
-          userId,
           accountId: validatedAccount?.id,
           SymbolProfile: {
             connectOrCreate: {
               create: {
-                currency,
                 dataSource,
-                symbol
+                symbol,
+                currency: assetProfile.currency,
+                userId: dataSource === 'MANUAL' ? user.id : undefined
               },
               where: {
                 dataSource_symbol: {
@@ -395,8 +419,14 @@ export class ImportService {
             }
           },
           updateAccountBalance: false,
-          User: { connect: { id: userId } }
+          User: { connect: { id: user.id } },
+          userId: user.id
         });
+
+        if (order.SymbolProfile?.symbol) {
+          // Update symbol that may have been assigned in createOrder()
+          assetProfile.symbol = order.SymbolProfile.symbol;
+        }
       }
 
       const value = new Big(quantity).mul(unitPrice).toNumber();
@@ -405,18 +435,21 @@ export class ImportService {
         ...order,
         error,
         value,
-        feeInBaseCurrency: this.exchangeRateDataService.toCurrency(
+        feeInBaseCurrency: await this.exchangeRateDataService.toCurrencyAtDate(
           fee,
-          currency,
-          userCurrency
+          assetProfile.currency,
+          userCurrency,
+          date
         ),
         // @ts-ignore
         SymbolProfile: assetProfile,
-        valueInBaseCurrency: this.exchangeRateDataService.toCurrency(
-          value,
-          currency,
-          userCurrency
-        )
+        valueInBaseCurrency:
+          await this.exchangeRateDataService.toCurrencyAtDate(
+            value,
+            assetProfile.currency,
+            userCurrency,
+            date
+          )
       });
     }
 
@@ -433,15 +466,16 @@ export class ImportService {
         });
       });
 
-      this.dataGatheringService.gatherSymbols(
-        uniqueActivities.map(({ date, SymbolProfile }) => {
+      this.dataGatheringService.gatherSymbols({
+        dataGatheringItems: uniqueActivities.map(({ date, SymbolProfile }) => {
           return {
             date,
             dataSource: SymbolProfile.dataSource,
             symbol: SymbolProfile.symbol
           };
-        })
-      );
+        }),
+        priority: DATA_GATHERING_QUEUE_PRIORITY_HIGH
+      });
     }
 
     return activities;
@@ -449,16 +483,20 @@ export class ImportService {
 
   private async extendActivitiesWithErrors({
     activitiesDto,
+    userCurrency,
     userId
   }: {
     activitiesDto: Partial<CreateOrderDto>[];
+    userCurrency: string;
     userId: string;
   }): Promise<Partial<Activity>[]> {
-    const existingActivities = await this.orderService.orders({
-      include: { SymbolProfile: true },
-      orderBy: { date: 'desc' },
-      where: { userId }
-    });
+    const { activities: existingActivities } =
+      await this.orderService.getOrders({
+        userCurrency,
+        userId,
+        includeDrafts: true,
+        withExcludedAccounts: true
+      });
 
     return activitiesDto.map(
       ({
@@ -473,12 +511,13 @@ export class ImportService {
         type,
         unitPrice
       }) => {
-        const date = parseISO(<string>(<unknown>dateString));
+        const date = parseISO(dateString);
         const isDuplicate = existingActivities.some((activity) => {
           return (
+            activity.accountId === accountId &&
             activity.SymbolProfile.currency === currency &&
             activity.SymbolProfile.dataSource === dataSource &&
-            isSameDay(activity.date, date) &&
+            isSameSecond(activity.date, date) &&
             activity.fee === fee &&
             activity.quantity === quantity &&
             activity.SymbolProfile.symbol === symbol &&
@@ -504,19 +543,15 @@ export class ImportService {
             currency,
             dataSource,
             symbol,
-            assetClass: null,
-            assetSubClass: null,
-            comment: null,
-            countries: null,
+            activitiesCount: undefined,
+            assetClass: undefined,
+            assetSubClass: undefined,
+            countries: undefined,
             createdAt: undefined,
+            holdings: undefined,
             id: undefined,
-            isin: null,
-            name: null,
-            scraperConfiguration: null,
-            sectors: null,
-            symbolMapping: null,
-            updatedAt: undefined,
-            url: null
+            sectors: undefined,
+            updatedAt: undefined
           }
         };
       }
@@ -535,10 +570,12 @@ export class ImportService {
 
   private async validateActivities({
     activitiesDto,
-    maxActivitiesToImport
+    maxActivitiesToImport,
+    user
   }: {
     activitiesDto: Partial<CreateOrderDto>[];
     maxActivitiesToImport: number;
+    user: UserWithSettings;
   }) {
     if (activitiesDto?.length > maxActivitiesToImport) {
       throw new Error(`Too many activities (${maxActivitiesToImport} at most)`);
@@ -547,41 +584,55 @@ export class ImportService {
     const assetProfiles: {
       [assetProfileIdentifier: string]: Partial<SymbolProfile>;
     } = {};
-
-    const uniqueActivitiesDto = uniqBy(
-      activitiesDto,
-      ({ dataSource, symbol }) => {
-        return getAssetProfileIdentifier({ dataSource, symbol });
-      }
-    );
+    const dataSources = await this.dataProviderService.getDataSources();
 
     for (const [
       index,
-      { currency, dataSource, symbol }
-    ] of uniqueActivitiesDto.entries()) {
-      if (dataSource !== 'MANUAL') {
-        const assetProfile = (
-          await this.dataProviderService.getAssetProfiles([
-            { dataSource, symbol }
-          ])
-        )?.[symbol];
+      { currency, dataSource, symbol, type }
+    ] of activitiesDto.entries()) {
+      if (!dataSources.includes(dataSource)) {
+        throw new Error(
+          `activities.${index}.dataSource ("${dataSource}") is not valid`
+        );
+      }
 
-        if (!assetProfile?.name) {
+      if (
+        this.configurationService.get('ENABLE_FEATURE_SUBSCRIPTION') &&
+        user.subscription.type === 'Basic'
+      ) {
+        const dataProvider = this.dataProviderService.getDataProvider(
+          DataSource[dataSource]
+        );
+
+        if (dataProvider.getDataProviderInfo().isPremium) {
           throw new Error(
-            `activities.${index}.symbol ("${symbol}") is not valid for the specified data source ("${dataSource}")`
+            `activities.${index}.dataSource ("${dataSource}") is not valid`
           );
         }
+      }
 
-        if (
-          assetProfile.currency !== currency &&
-          !this.exchangeRateDataService.hasCurrencyPair(
-            currency,
-            assetProfile.currency
-          )
-        ) {
-          throw new Error(
-            `activities.${index}.currency ("${currency}") does not match with "${assetProfile.currency}" and no exchange rate is available from "${currency}" to "${assetProfile.currency}"`
-          );
+      if (!assetProfiles[getAssetProfileIdentifier({ dataSource, symbol })]) {
+        const assetProfile = {
+          currency,
+          ...(
+            await this.dataProviderService.getAssetProfiles([
+              { dataSource, symbol }
+            ])
+          )?.[symbol]
+        };
+
+        if (type === 'BUY' || type === 'DIVIDEND' || type === 'SELL') {
+          if (!assetProfile?.name) {
+            throw new Error(
+              `activities.${index}.symbol ("${symbol}") is not valid for the specified data source ("${dataSource}")`
+            );
+          }
+
+          if (assetProfile.currency !== currency) {
+            throw new Error(
+              `activities.${index}.currency ("${currency}") does not match with currency of ${assetProfile.symbol} ("${assetProfile.currency}")`
+            );
+          }
         }
 
         assetProfiles[getAssetProfileIdentifier({ dataSource, symbol })] =

@@ -3,7 +3,8 @@ import { DateQuery } from '@ghostfolio/api/app/portfolio/interfaces/date-query.i
 import { IDataGatheringItem } from '@ghostfolio/api/services/interfaces/interfaces';
 import { PrismaService } from '@ghostfolio/api/services/prisma/prisma.service';
 import { resetHours } from '@ghostfolio/common/helper';
-import { UniqueAsset } from '@ghostfolio/common/interfaces';
+import { AssetProfileIdentifier } from '@ghostfolio/common/interfaces';
+
 import { Injectable } from '@nestjs/common';
 import {
   DataSource,
@@ -16,7 +17,7 @@ import {
 export class MarketDataService {
   public constructor(private readonly prismaService: PrismaService) {}
 
-  public async deleteMany({ dataSource, symbol }: UniqueAsset) {
+  public async deleteMany({ dataSource, symbol }: AssetProfileIdentifier) {
     return this.prismaService.marketData.deleteMany({
       where: {
         dataSource,
@@ -39,28 +40,32 @@ export class MarketDataService {
     });
   }
 
-  public async getMax({ dataSource, symbol }: UniqueAsset): Promise<number> {
-    const aggregations = await this.prismaService.marketData.aggregate({
-      _max: {
+  public async getMax({ dataSource, symbol }: AssetProfileIdentifier) {
+    return this.prismaService.marketData.findFirst({
+      select: {
+        date: true,
         marketPrice: true
       },
+      orderBy: [
+        {
+          marketPrice: 'desc'
+        }
+      ],
       where: {
         dataSource,
         symbol
       }
     });
-
-    return aggregations._max.marketPrice;
   }
 
   public async getRange({
-    dateQuery,
-    symbols
+    assetProfileIdentifiers,
+    dateQuery
   }: {
+    assetProfileIdentifiers: AssetProfileIdentifier[];
     dateQuery: DateQuery;
-    symbols: string[];
   }): Promise<MarketData[]> {
-    return await this.prismaService.marketData.findMany({
+    return this.prismaService.marketData.findMany({
       orderBy: [
         {
           date: 'asc'
@@ -70,24 +75,33 @@ export class MarketDataService {
         }
       ],
       where: {
+        dataSource: {
+          in: assetProfileIdentifiers.map(({ dataSource }) => {
+            return dataSource;
+          })
+        },
         date: dateQuery,
         symbol: {
-          in: symbols
+          in: assetProfileIdentifiers.map(({ symbol }) => {
+            return symbol;
+          })
         }
       }
     });
   }
 
   public async marketDataItems(params: {
+    select?: Prisma.MarketDataSelectScalar;
     skip?: number;
     take?: number;
     cursor?: Prisma.MarketDataWhereUniqueInput;
     where?: Prisma.MarketDataWhereInput;
     orderBy?: Prisma.MarketDataOrderByWithRelationInput;
   }): Promise<MarketData[]> {
-    const { skip, take, cursor, where, orderBy } = params;
+    const { select, skip, take, cursor, where, orderBy } = params;
 
     return this.prismaService.marketData.findMany({
+      select,
       cursor,
       orderBy,
       skip,
@@ -130,21 +144,21 @@ export class MarketDataService {
       ({ dataSource, date, marketPrice, symbol, state }) => {
         return this.prismaService.marketData.upsert({
           create: {
-            dataSource: <DataSource>dataSource,
-            date: <Date>date,
-            marketPrice: <number>marketPrice,
-            state: <MarketDataState>state,
-            symbol: <string>symbol
+            dataSource: dataSource as DataSource,
+            date: date as Date,
+            marketPrice: marketPrice as number,
+            state: state as MarketDataState,
+            symbol: symbol as string
           },
           update: {
-            marketPrice: <number>marketPrice,
-            state: <MarketDataState>state
+            marketPrice: marketPrice as number,
+            state: state as MarketDataState
           },
           where: {
             dataSource_date_symbol: {
-              dataSource: <DataSource>dataSource,
-              date: <Date>date,
-              symbol: <string>symbol
+              dataSource: dataSource as DataSource,
+              date: date as Date,
+              symbol: symbol as string
             }
           }
         });

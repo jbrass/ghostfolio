@@ -1,3 +1,6 @@
+import { IsCurrencyCode } from '@ghostfolio/api/validators/is-currency-code';
+import { IsAfter1970Constraint } from '@ghostfolio/common/validator-constraints/is-after-1970';
+
 import {
   AssetClass,
   AssetSubClass,
@@ -8,12 +11,13 @@ import {
 import { Transform, TransformFnParams } from 'class-transformer';
 import {
   IsArray,
-  IsBoolean,
   IsEnum,
   IsISO8601,
   IsNumber,
   IsOptional,
-  IsString
+  IsString,
+  Min,
+  Validate
 } from 'class-validator';
 import { isString } from 'lodash';
 
@@ -37,22 +41,29 @@ export class UpdateOrderDto {
   )
   comment?: string;
 
-  @IsString()
+  @IsCurrencyCode()
   currency: string;
+
+  @IsCurrencyCode()
+  @IsOptional()
+  customCurrency?: string;
 
   @IsString()
   dataSource: DataSource;
 
   @IsISO8601()
+  @Validate(IsAfter1970Constraint)
   date: string;
 
   @IsNumber()
+  @Min(0)
   fee: number;
 
   @IsString()
   id: string;
 
   @IsNumber()
+  @Min(0)
   quantity: number;
 
   @IsString()
@@ -66,5 +77,6 @@ export class UpdateOrderDto {
   type: Type;
 
   @IsNumber()
+  @Min(0)
   unitPrice: number;
 }

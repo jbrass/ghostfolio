@@ -1,19 +1,21 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
-import { ActivatedRoute, Router } from '@angular/router';
 import { CreateOrderDto } from '@ghostfolio/api/app/order/create-order.dto';
 import { Activity } from '@ghostfolio/api/app/order/interfaces/activities.interface';
 import { UpdateOrderDto } from '@ghostfolio/api/app/order/update-order.dto';
-import { PositionDetailDialogParams } from '@ghostfolio/client/components/position/position-detail-dialog/interfaces/interfaces';
-import { PositionDetailDialog } from '@ghostfolio/client/components/position/position-detail-dialog/position-detail-dialog.component';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { IcsService } from '@ghostfolio/client/services/ics/ics.service';
 import { ImpersonationStorageService } from '@ghostfolio/client/services/impersonation-storage.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
+import { DEFAULT_PAGE_SIZE } from '@ghostfolio/common/config';
 import { downloadAsFile } from '@ghostfolio/common/helper';
-import { User } from '@ghostfolio/common/interfaces';
+import { AssetProfileIdentifier, User } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
-import { DataSource, Order as OrderModel } from '@prisma/client';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { PageEvent } from '@angular/material/paginator';
+import { Sort, SortDirection } from '@angular/material/sort';
+import { MatTableDataSource } from '@angular/material/table';
+import { ActivatedRoute, Router } from '@angular/router';
 import { format, parseISO } from 'date-fns';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject, Subscription } from 'rxjs';
@@ -24,18 +26,24 @@ import { ImportActivitiesDialog } from './import-activities-dialog/import-activi
 import { ImportActivitiesDialogParams } from './import-activities-dialog/interfaces/interfaces';
 
 @Component({
+  host: { class: 'has-fab' },
   selector: 'gf-activities-page',
   styleUrls: ['./activities-page.scss'],
-  templateUrl: './activities-page.html'
+  templateUrl: './activities-page.html',
+  standalone: false
 })
 export class ActivitiesPageComponent implements OnDestroy, OnInit {
-  public activities: Activity[];
-  public defaultAccountId: string;
+  public dataSource: MatTableDataSource<Activity>;
   public deviceType: string;
   public hasImpersonationId: boolean;
   public hasPermissionToCreateActivity: boolean;
   public hasPermissionToDeleteActivity: boolean;
+  public pageIndex = 0;
+  public pageSize = DEFAULT_PAGE_SIZE;
   public routeQueryParams: Subscription;
+  public sortColumn = 'date';
+  public sortDirection: SortDirection = 'desc';
+  public totalItems: number;
   public user: User;
 
   private unsubscribeSubject = new Subject<void>();
@@ -55,26 +63,27 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe((params) => {
         if (params['createDialog']) {
-          this.openCreateActivityDialog();
+          if (params['activityId']) {
+            this.dataService
+              .fetchActivity(params['activityId'])
+              .pipe(takeUntil(this.unsubscribeSubject))
+              .subscribe((activity) => {
+                this.openCreateActivityDialog(activity);
+              });
+          } else {
+            this.openCreateActivityDialog();
+          }
         } else if (params['editDialog']) {
-          if (this.activities) {
-            const activity = this.activities.find(({ id }) => {
-              return id === params['activityId'];
-            });
-
-            this.openUpdateActivityDialog(activity);
+          if (params['activityId']) {
+            this.dataService
+              .fetchActivity(params['activityId'])
+              .pipe(takeUntil(this.unsubscribeSubject))
+              .subscribe((activity) => {
+                this.openUpdateActivityDialog(activity);
+              });
           } else {
             this.router.navigate(['.'], { relativeTo: this.route });
           }
-        } else if (
-          params['dataSource'] &&
-          params['positionDetailDialog'] &&
-          params['symbol']
-        ) {
-          this.openPositionDialog({
-            dataSource: params['dataSource'],
-            symbol: params['symbol']
-          });
         }
       });
   }
@@ -95,24 +104,28 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
         if (state?.user) {
           this.updateUser(state.user);
 
+          this.fetchActivities();
+
           this.changeDetectorRef.markForCheck();
         }
       });
-
-    this.fetchActivities();
   }
 
   public fetchActivities() {
     this.dataService
-      .fetchActivities({})
+      .fetchActivities({
+        filters: this.userService.getFilters(),
+        skip: this.pageIndex * this.pageSize,
+        sortColumn: this.sortColumn,
+        sortDirection: this.sortDirection,
+        take: this.pageSize
+      })
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe(({ activities }) => {
-        this.activities = activities;
+      .subscribe(({ activities, count }) => {
+        this.dataSource = new MatTableDataSource(activities);
+        this.totalItems = count;
 
-        if (
-          this.hasPermissionToCreateActivity &&
-          this.activities?.length <= 0
-        ) {
+        if (this.hasPermissionToCreateActivity && this.totalItems <= 0) {
           this.router.navigate([], { queryParams: { createDialog: true } });
         }
 
@@ -120,41 +133,55 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
       });
   }
 
+  public onChangePage(page: PageEvent) {
+    this.pageIndex = page.pageIndex;
+
+    this.fetchActivities();
+  }
+
+  public onClickActivity({ dataSource, symbol }: AssetProfileIdentifier) {
+    this.router.navigate([], {
+      queryParams: {
+        dataSource,
+        symbol,
+        holdingDetailDialog: true
+      }
+    });
+  }
+
   public onCloneActivity(aActivity: Activity) {
     this.openCreateActivityDialog(aActivity);
   }
 
-  public onDeleteActivity(aId: string) {
+  public onDeleteActivities() {
     this.dataService
-      .deleteOrder(aId)
+      .deleteActivities({
+        filters: this.userService.getFilters()
+      })
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe({
-        next: () => {
-          this.fetchActivities();
-        }
+      .subscribe(() => {
+        this.fetchActivities();
       });
   }
 
-  public onDeleteAllActivities() {
-    const confirmation = confirm(
-      $localize`Do you really want to delete all your activities?`
-    );
-
-    if (confirmation) {
-      this.dataService
-        .deleteAllOrders()
-        .pipe(takeUntil(this.unsubscribeSubject))
-        .subscribe({
-          next: () => {
-            this.fetchActivities();
-          }
-        });
-    }
+  public onDeleteActivity(aId: string) {
+    this.dataService
+      .deleteActivity(aId)
+      .pipe(takeUntil(this.unsubscribeSubject))
+      .subscribe(() => {
+        this.fetchActivities();
+      });
   }
 
   public onExport(activityIds?: string[]) {
+    let fetchExportParams: any = { activityIds };
+
+    if (!activityIds) {
+      fetchExportParams = { filters: this.userService.getFilters() };
+    }
+
     this.dataService
-      .fetchExport(activityIds)
+      .fetchExport(fetchExportParams)
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe((data) => {
         for (const activity of data.activities) {
@@ -174,7 +201,7 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
 
   public onExportDrafts(activityIds?: string[]) {
     this.dataService
-      .fetchExport(activityIds)
+      .fetchExport({ activityIds })
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe((data) => {
         downloadAsFile({
@@ -192,10 +219,10 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
 
   public onImport() {
     const dialogRef = this.dialog.open(ImportActivitiesDialog, {
-      data: <ImportActivitiesDialogParams>{
+      data: {
         deviceType: this.deviceType,
         user: this.user
-      },
+      } as ImportActivitiesDialogParams,
       width: this.deviceType === 'mobile' ? '100vw' : '50rem'
     });
 
@@ -209,11 +236,11 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
 
   public onImportDividends() {
     const dialogRef = this.dialog.open(ImportActivitiesDialog, {
-      data: <ImportActivitiesDialogParams>{
+      data: {
         activityTypes: ['DIVIDEND'],
         deviceType: this.deviceType,
         user: this.user
-      },
+      } as ImportActivitiesDialogParams,
       width: this.deviceType === 'mobile' ? '100vw' : '50rem'
     });
 
@@ -225,29 +252,35 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
       });
   }
 
-  public onUpdateActivity(aActivity: OrderModel) {
+  public onSortChanged({ active, direction }: Sort) {
+    this.pageIndex = 0;
+    this.sortColumn = active;
+    this.sortDirection = direction;
+
+    this.fetchActivities();
+  }
+
+  public onUpdateActivity(aActivity: Activity) {
     this.router.navigate([], {
       queryParams: { activityId: aActivity.id, editDialog: true }
     });
   }
 
-  public openUpdateActivityDialog(activity: Activity): void {
+  public openUpdateActivityDialog(activity: Activity) {
     const dialogRef = this.dialog.open(CreateOrUpdateActivityDialog, {
       data: {
         activity,
         accounts: this.user?.accounts,
         user: this.user
       },
-      height: this.deviceType === 'mobile' ? '97.5vh' : '80vh',
+      height: this.deviceType === 'mobile' ? '98vh' : '80vh',
       width: this.deviceType === 'mobile' ? '100vw' : '50rem'
     });
 
     dialogRef
       .afterClosed()
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe((data: any) => {
-        const transaction: UpdateOrderDto = data?.activity;
-
+      .subscribe((transaction: UpdateOrderDto | null) => {
         if (transaction) {
           this.dataService
             .putOrder(transaction)
@@ -268,7 +301,7 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
     this.unsubscribeSubject.complete();
   }
 
-  private openCreateActivityDialog(aActivity?: Activity): void {
+  private openCreateActivityDialog(aActivity?: Activity) {
     this.userService
       .get()
       .pipe(takeUntil(this.unsubscribeSubject))
@@ -280,7 +313,7 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
             accounts: this.user?.accounts,
             activity: {
               ...aActivity,
-              accountId: aActivity?.accountId ?? this.defaultAccountId,
+              accountId: aActivity?.accountId,
               date: new Date(),
               id: null,
               fee: 0,
@@ -289,16 +322,14 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
             },
             user: this.user
           },
-          height: this.deviceType === 'mobile' ? '97.5vh' : '80vh',
+          height: this.deviceType === 'mobile' ? '98vh' : '80vh',
           width: this.deviceType === 'mobile' ? '100vw' : '50rem'
         });
 
         dialogRef
           .afterClosed()
           .pipe(takeUntil(this.unsubscribeSubject))
-          .subscribe((data: any) => {
-            const transaction: CreateOrderDto = data?.activity;
-
+          .subscribe((transaction: CreateOrderDto | null) => {
             if (transaction) {
               this.dataService.postOrder(transaction).subscribe({
                 next: () => {
@@ -312,53 +343,8 @@ export class ActivitiesPageComponent implements OnDestroy, OnInit {
       });
   }
 
-  private openPositionDialog({
-    dataSource,
-    symbol
-  }: {
-    dataSource: DataSource;
-    symbol: string;
-  }) {
-    this.userService
-      .get()
-      .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe((user) => {
-        this.updateUser(user);
-
-        const dialogRef = this.dialog.open(PositionDetailDialog, {
-          autoFocus: false,
-          data: <PositionDetailDialogParams>{
-            dataSource,
-            symbol,
-            baseCurrency: this.user?.settings?.baseCurrency,
-            colorScheme: this.user?.settings?.colorScheme,
-            deviceType: this.deviceType,
-            hasImpersonationId: this.hasImpersonationId,
-            hasPermissionToReportDataGlitch: hasPermission(
-              this.user?.permissions,
-              permissions.reportDataGlitch
-            ),
-            locale: this.user?.settings?.locale
-          },
-          height: this.deviceType === 'mobile' ? '97.5vh' : '80vh',
-          width: this.deviceType === 'mobile' ? '100vw' : '50rem'
-        });
-
-        dialogRef
-          .afterClosed()
-          .pipe(takeUntil(this.unsubscribeSubject))
-          .subscribe(() => {
-            this.router.navigate(['.'], { relativeTo: this.route });
-          });
-      });
-  }
-
   private updateUser(aUser: User) {
     this.user = aUser;
-
-    this.defaultAccountId = this.user?.accounts.find((account) => {
-      return account.isDefault;
-    })?.id;
 
     this.hasPermissionToCreateActivity =
       !this.hasImpersonationId &&

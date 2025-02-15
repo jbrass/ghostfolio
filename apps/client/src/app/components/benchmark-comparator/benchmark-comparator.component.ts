@@ -1,4 +1,19 @@
-import 'chartjs-adapter-date-fns';
+import {
+  getTooltipOptions,
+  getTooltipPositionerMapTop,
+  getVerticalHoverLinePlugin
+} from '@ghostfolio/common/chart-helper';
+import { primaryColorRgb, secondaryColorRgb } from '@ghostfolio/common/config';
+import {
+  getBackgroundColor,
+  getDateFormatString,
+  getLocale,
+  getTextColor,
+  parseDate
+} from '@ghostfolio/common/helper';
+import { LineChartItem, User } from '@ghostfolio/common/interfaces';
+import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+import { ColorScheme } from '@ghostfolio/common/types';
 
 import {
   ChangeDetectionStrategy,
@@ -10,48 +25,35 @@ import {
   Output,
   ViewChild
 } from '@angular/core';
-import {
-  getTooltipOptions,
-  getTooltipPositionerMapTop,
-  getVerticalHoverLinePlugin
-} from '@ghostfolio/common/chart-helper';
-import { primaryColorRgb, secondaryColorRgb } from '@ghostfolio/common/config';
-import {
-  getBackgroundColor,
-  getDateFormatString,
-  getTextColor,
-  parseDate
-} from '@ghostfolio/common/helper';
-import { LineChartItem, User } from '@ghostfolio/common/interfaces';
-import { hasPermission, permissions } from '@ghostfolio/common/permissions';
-import { ColorScheme } from '@ghostfolio/common/types';
 import { SymbolProfile } from '@prisma/client';
 import {
   Chart,
   ChartData,
+  LinearScale,
   LineController,
   LineElement,
-  LinearScale,
   PointElement,
   TimeScale,
-  Tooltip
+  Tooltip,
+  TooltipPosition
 } from 'chart.js';
+import 'chartjs-adapter-date-fns';
 import annotationPlugin from 'chartjs-plugin-annotation';
 
 @Component({
   selector: 'gf-benchmark-comparator',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './benchmark-comparator.component.html',
-  styleUrls: ['./benchmark-comparator.component.scss']
+  styleUrls: ['./benchmark-comparator.component.scss'],
+  standalone: false
 })
 export class BenchmarkComparatorComponent implements OnChanges, OnDestroy {
+  @Input() benchmark: Partial<SymbolProfile>;
   @Input() benchmarkDataItems: LineChartItem[] = [];
-  @Input() benchmark: string;
   @Input() benchmarks: Partial<SymbolProfile>[];
   @Input() colorScheme: ColorScheme;
-  @Input() daysInMarket: number;
   @Input() isLoading: boolean;
-  @Input() locale: string;
+  @Input() locale = getLocale();
   @Input() performanceDataItems: LineChartItem[];
   @Input() user: User;
 
@@ -73,7 +75,7 @@ export class BenchmarkComparatorComponent implements OnChanges, OnDestroy {
       Tooltip
     );
 
-    Tooltip.positioners['top'] = (elements, position) =>
+    Tooltip.positioners['top'] = (_elements, position: TooltipPosition) =>
       getTooltipPositionerMapTop(this.chart, position);
   }
 
@@ -97,6 +99,12 @@ export class BenchmarkComparatorComponent implements OnChanges, OnDestroy {
   }
 
   private initialize() {
+    const benchmarkDataValues: Record<string, number> = {};
+
+    for (const { date, value } of this.benchmarkDataItems) {
+      benchmarkDataValues[date] = value;
+    }
+
     const data: ChartData<'line'> = {
       datasets: [
         {
@@ -104,7 +112,7 @@ export class BenchmarkComparatorComponent implements OnChanges, OnDestroy {
           borderColor: `rgb(${primaryColorRgb.r}, ${primaryColorRgb.g}, ${primaryColorRgb.b})`,
           borderWidth: 2,
           data: this.performanceDataItems.map(({ date, value }) => {
-            return { x: parseDate(date).getTime(), y: value };
+            return { x: parseDate(date).getTime(), y: value * 100 };
           }),
           label: $localize`Portfolio`
         },
@@ -112,10 +120,13 @@ export class BenchmarkComparatorComponent implements OnChanges, OnDestroy {
           backgroundColor: `rgb(${secondaryColorRgb.r}, ${secondaryColorRgb.g}, ${secondaryColorRgb.b})`,
           borderColor: `rgb(${secondaryColorRgb.r}, ${secondaryColorRgb.g}, ${secondaryColorRgb.b})`,
           borderWidth: 2,
-          data: this.benchmarkDataItems.map(({ date, value }) => {
-            return { x: parseDate(date).getTime(), y: value };
+          data: this.performanceDataItems.map(({ date }) => {
+            return {
+              x: parseDate(date).getTime(),
+              y: benchmarkDataValues[date]
+            };
           }),
-          label: $localize`Benchmark`
+          label: this.benchmark?.name ?? $localize`Benchmark`
         }
       ]
     };
@@ -123,9 +134,8 @@ export class BenchmarkComparatorComponent implements OnChanges, OnDestroy {
     if (this.chartCanvas) {
       if (this.chart) {
         this.chart.data = data;
-        this.chart.options.plugins.tooltip = <unknown>(
-          this.getTooltipPluginConfiguration()
-        );
+        this.chart.options.plugins.tooltip =
+          this.getTooltipPluginConfiguration() as unknown;
         this.chart.update();
       } else {
         this.chart = new Chart(this.chartCanvas.nativeElement, {
@@ -144,7 +154,7 @@ export class BenchmarkComparatorComponent implements OnChanges, OnDestroy {
             },
             interaction: { intersect: false, mode: 'index' },
             maintainAspectRatio: true,
-            plugins: <unknown>{
+            plugins: {
               annotation: {
                 annotations: {
                   yAxis: {
@@ -163,7 +173,7 @@ export class BenchmarkComparatorComponent implements OnChanges, OnDestroy {
               verticalHoverLine: {
                 color: `rgba(${getTextColor(this.colorScheme)}, 0.1)`
               }
-            },
+            } as unknown,
             responsive: true,
             scales: {
               x: {
@@ -227,8 +237,8 @@ export class BenchmarkComparatorComponent implements OnChanges, OnDestroy {
         locale: this.locale,
         unit: '%'
       }),
-      mode: 'x',
-      position: <unknown>'top',
+      mode: 'index',
+      position: 'top' as unknown,
       xAlign: 'center',
       yAlign: 'bottom'
     };

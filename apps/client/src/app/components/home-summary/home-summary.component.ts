@@ -1,10 +1,3 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
-import {
-  MatSnackBar,
-  MatSnackBarRef,
-  TextOnlySnackBar
-} from '@angular/material/snack-bar';
-import { Router } from '@angular/router';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { ImpersonationStorageService } from '@ghostfolio/client/services/impersonation-storage.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
@@ -14,13 +7,17 @@ import {
   User
 } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
 @Component({
   selector: 'gf-home-summary',
   styleUrls: ['./home-summary.scss'],
-  templateUrl: './home-summary.html'
+  templateUrl: './home-summary.html',
+  standalone: false
 })
 export class HomeSummaryComponent implements OnDestroy, OnInit {
   public hasImpersonationId: boolean;
@@ -38,8 +35,6 @@ export class HomeSummaryComponent implements OnDestroy, OnInit {
     private changeDetectorRef: ChangeDetectorRef,
     private dataService: DataService,
     private impersonationStorageService: ImpersonationStorageService,
-    private router: Router,
-    private snackBar: MatSnackBar,
     private userService: UserService
   ) {
     this.info = this.dataService.fetchInfo();
@@ -79,10 +74,8 @@ export class HomeSummaryComponent implements OnDestroy, OnInit {
       .putUserSetting({ emergencyFund })
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe(() => {
-        this.userService.remove();
-
         this.userService
-          .get()
+          .get(true)
           .pipe(takeUntil(this.unsubscribeSubject))
           .subscribe((user) => {
             this.user = user;
@@ -106,24 +99,6 @@ export class HomeSummaryComponent implements OnDestroy, OnInit {
       .subscribe(({ summary }) => {
         this.summary = summary;
         this.isLoading = false;
-
-        if (!this.summary) {
-          this.snackBarRef = this.snackBar.open(
-            $localize`This feature requires a subscription.`,
-            this.hasPermissionForSubscription
-              ? $localize`Upgrade Plan`
-              : undefined,
-            { duration: 6000 }
-          );
-
-          this.snackBarRef.afterDismissed().subscribe(() => {
-            this.snackBarRef = undefined;
-          });
-
-          this.snackBarRef.onAction().subscribe(() => {
-            this.router.navigate(['/' + $localize`pricing`]);
-          });
-        }
 
         this.changeDetectorRef.markForCheck();
       });

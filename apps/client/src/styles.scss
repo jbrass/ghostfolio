@@ -214,7 +214,7 @@ body {
     }
   }
 
-  &.is-dark-theme {
+  &.theme-dark {
     background: var(--dark-background);
     color: rgba(var(--light-primary-text));
 
@@ -356,8 +356,8 @@ ngx-skeleton-loader {
 }
 
 .cdk-overlay-container {
-  .cdk-overlay-pane {
-    max-width: 95vw !important;
+  .cdk-global-overlay-wrapper {
+    justify-content: center !important;
   }
 }
 
@@ -369,13 +369,29 @@ ngx-skeleton-loader {
   cursor: pointer;
 }
 
+.gf-pointer-events-none {
+  pointer-events: none;
+}
+
+.gf-spacer {
+  flex: 1 1 auto;
+}
+
 .gf-table {
   @include gf-table;
 }
 
+.gf-text-wrap-balance {
+  text-wrap: balance;
+}
+
+.has-fab {
+  padding-bottom: 3rem !important;
+}
+
 .has-info-message {
   .page.has-tabs {
-    height: calc(100vh - 2 * var(--mat-toolbar-standard-height));
+    height: calc(100svh - 2 * var(--mat-toolbar-standard-height));
   }
 }
 
@@ -435,7 +451,21 @@ ngx-skeleton-loader {
 }
 
 .mat-mdc-menu-panel {
+  &.assistant {
+    max-width: unset !important;
+
+    .mat-mdc-menu-content {
+      padding: 0;
+    }
+  }
+
   .mat-mdc-menu-item {
+    &.font-weight-bold {
+      .mat-mdc-menu-item-text {
+        --mat-menu-item-label-text-weight: 700;
+      }
+    }
+
     .mdc-list-item__primary-text {
       align-items: center;
       display: flex;
@@ -449,6 +479,15 @@ ngx-skeleton-loader {
   .mat-mdc-paginator-page-size,
   .mat-mdc-paginator-page-size {
     display: none;
+  }
+}
+
+/**
+ * Fix for https://github.com/angular/components/issues/26818
+ */
+.mat-mdc-slide-toggle {
+  .mdc-switch__track {
+    background-color: rgba(var(--palette-primary-500), 1);
   }
 }
 
@@ -476,10 +515,23 @@ ngx-skeleton-loader {
   min-width: unset !important;
 }
 
+.overflow-x-auto {
+  overflow-x: auto;
+}
+
 .page {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: constant(safe-area-inset-bottom);
+
+  .fab-container {
+    bottom: 2rem;
+    position: fixed;
+    right: 2rem;
+    z-index: 999;
+  }
 
   &:not(.has-tabs) {
     @media (min-width: 576px) {
@@ -488,9 +540,13 @@ ngx-skeleton-loader {
   }
 
   &.has-tabs {
-    height: calc(100vh - var(--mat-toolbar-standard-height));
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-bottom: constant(safe-area-inset-bottom);
+    height: calc(100svh - var(--mat-toolbar-standard-height));
+
+    .fab-container {
+      @media (max-width: 575.98px) {
+        bottom: 5rem;
+      }
+    }
 
     .mat-mdc-tab-nav-bar {
       --mat-tab-header-active-focus-indicator-color: transparent;
@@ -499,6 +555,16 @@ ngx-skeleton-loader {
         var(--dark-primary-text)
       );
       --mdc-tab-indicator-active-indicator-color: transparent;
+    }
+
+    .mat-mdc-tab-nav-panel {
+      padding: 2rem 0;
+    }
+
+    @media (max-width: 575.98px) {
+      .mat-mdc-tab-link {
+        --mdc-secondary-navigation-tab-container-height: 3rem;
+      }
     }
 
     @media (min-width: 576px) {
@@ -519,10 +585,6 @@ ngx-skeleton-loader {
           }
         }
       }
-
-      .mat-mdc-tab-nav-panel {
-        padding: 2rem 0;
-      }
     }
   }
 }
@@ -537,6 +599,10 @@ ngx-skeleton-loader {
 
 .text-decoration-underline {
   text-decoration: underline !important;
+}
+
+.text-line-through {
+  text-decoration: line-through;
 }
 
 .with-placeholder-as-option {

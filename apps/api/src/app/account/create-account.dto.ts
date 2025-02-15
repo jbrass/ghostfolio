@@ -1,4 +1,5 @@
-import { AccountType } from '@prisma/client';
+import { IsCurrencyCode } from '@ghostfolio/api/validators/is-currency-code';
+
 import { Transform, TransformFnParams } from 'class-transformer';
 import {
   IsBoolean,
@@ -10,10 +11,6 @@ import {
 import { isString } from 'lodash';
 
 export class CreateAccountDto {
-  @IsOptional()
-  @IsString()
-  accountType?: AccountType;
-
   @IsNumber()
   balance: number;
 
@@ -24,7 +21,7 @@ export class CreateAccountDto {
   )
   comment?: string;
 
-  @IsString()
+  @IsCurrencyCode()
   currency: string;
 
   @IsOptional()
@@ -39,6 +36,6 @@ export class CreateAccountDto {
   name: string;
 
   @IsString()
-  @ValidateIf((object, value) => value !== null)
+  @ValidateIf((_object, value) => value !== null)
   platformId: string | null;
 }

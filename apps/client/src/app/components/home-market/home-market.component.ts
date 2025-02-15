@@ -1,4 +1,3 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
 import { ghostfolioFearAndGreedIndexSymbol } from '@ghostfolio/common/config';
@@ -10,23 +9,27 @@ import {
   User
 } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
 @Component({
   selector: 'gf-home-market',
   styleUrls: ['./home-market.scss'],
-  templateUrl: './home-market.html'
+  templateUrl: './home-market.html',
+  standalone: false
 })
 export class HomeMarketComponent implements OnDestroy, OnInit {
   public benchmarks: Benchmark[];
+  public deviceType: string;
   public fearAndGreedIndex: number;
   public fearLabel = $localize`Fear`;
   public greedLabel = $localize`Greed`;
   public hasPermissionToAccessFearAndGreedIndex: boolean;
   public historicalDataItems: HistoricalDataItem[];
   public info: InfoItem;
-  public isLoading = true;
   public readonly numberOfDays = 365;
   public user: User;
 
@@ -35,10 +38,11 @@ export class HomeMarketComponent implements OnDestroy, OnInit {
   public constructor(
     private changeDetectorRef: ChangeDetectorRef,
     private dataService: DataService,
+    private deviceService: DeviceDetectorService,
     private userService: UserService
   ) {
+    this.deviceType = this.deviceService.getDeviceInfo().deviceType;
     this.info = this.dataService.fetchInfo();
-    this.isLoading = true;
 
     this.userService.stateChanged
       .pipe(takeUntil(this.unsubscribeSubject))
@@ -84,7 +88,6 @@ export class HomeMarketComponent implements OnDestroy, OnInit {
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe(({ benchmarks }) => {
         this.benchmarks = benchmarks;
-        this.isLoading = false;
 
         this.changeDetectorRef.markForCheck();
       });

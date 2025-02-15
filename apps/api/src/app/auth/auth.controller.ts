@@ -1,7 +1,9 @@
 import { WebAuthService } from '@ghostfolio/api/app/auth/web-auth.service';
+import { HasPermissionGuard } from '@ghostfolio/api/guards/has-permission.guard';
 import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
 import { DEFAULT_LANGUAGE_CODE } from '@ghostfolio/common/config';
 import { OAuthResponse } from '@ghostfolio/common/interfaces';
+
 import {
   Body,
   Controller,
@@ -12,12 +14,12 @@ import {
   Req,
   Res,
   UseGuards,
-  VERSION_NEUTRAL,
-  Version
+  Version,
+  VERSION_NEUTRAL
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';
-import { StatusCodes, getReasonPhrase } from 'http-status-codes';
+import { getReasonPhrase, StatusCodes } from 'http-status-codes';
 
 import { AuthService } from './auth.service';
 import {
@@ -83,7 +85,7 @@ export class AuthController {
     @Res() response: Response
   ) {
     // Handles the Google OAuth2 callback
-    const jwt: string = (<any>request.user).jwt;
+    const jwt: string = (request.user as any).jwt;
 
     if (jwt) {
       response.redirect(
@@ -118,20 +120,17 @@ export class AuthController {
   }
 
   @Get('webauthn/generate-registration-options')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), HasPermissionGuard)
   public async generateRegistrationOptions() {
     return this.webAuthService.generateRegistrationOptions();
   }
 
   @Post('webauthn/verify-attestation')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), HasPermissionGuard)
   public async verifyAttestation(
     @Body() body: { deviceName: string; credential: AttestationCredentialJSON }
   ) {
-    return this.webAuthService.verifyAttestation(
-      body.deviceName,
-      body.credential
-    );
+    return this.webAuthService.verifyAttestation(body.credential);
   }
 
   @Post('webauthn/generate-assertion-options')

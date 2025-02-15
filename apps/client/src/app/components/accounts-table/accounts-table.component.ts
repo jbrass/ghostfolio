@@ -1,3 +1,7 @@
+import { ConfirmationDialogType } from '@ghostfolio/client/core/notification/confirmation-dialog/confirmation-dialog.type';
+import { NotificationService } from '@ghostfolio/client/core/notification/notification.service';
+import { getLocale } from '@ghostfolio/common/helper';
+
 import {
   ChangeDetectionStrategy,
   Component,
@@ -5,7 +9,6 @@ import {
   Input,
   OnChanges,
   OnDestroy,
-  OnInit,
   Output,
   ViewChild
 } from '@angular/core';
@@ -20,47 +23,65 @@ import { Subject, Subscription } from 'rxjs';
   selector: 'gf-accounts-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './accounts-table.component.html',
-  styleUrls: ['./accounts-table.component.scss']
+  styleUrls: ['./accounts-table.component.scss'],
+  standalone: false
 })
-export class AccountsTableComponent implements OnChanges, OnDestroy, OnInit {
+export class AccountsTableComponent implements OnChanges, OnDestroy {
   @Input() accounts: AccountModel[];
   @Input() baseCurrency: string;
   @Input() deviceType: string;
-  @Input() locale: string;
+  @Input() hasPermissionToOpenDetails = true;
+  @Input() locale = getLocale();
   @Input() showActions: boolean;
+  @Input() showBalance = true;
+  @Input() showFooter = true;
+  @Input() showTransactions = true;
+  @Input() showValue = true;
+  @Input() showValueInBaseCurrency = true;
   @Input() totalBalanceInBaseCurrency: number;
   @Input() totalValueInBaseCurrency: number;
   @Input() transactionCount: number;
 
   @Output() accountDeleted = new EventEmitter<string>();
   @Output() accountToUpdate = new EventEmitter<AccountModel>();
+  @Output() transferBalance = new EventEmitter<void>();
 
   @ViewChild(MatSort) sort: MatSort;
 
-  public dataSource: MatTableDataSource<AccountModel> =
-    new MatTableDataSource();
+  public dataSource = new MatTableDataSource<AccountModel>();
   public displayedColumns = [];
   public isLoading = true;
   public routeQueryParams: Subscription;
 
   private unsubscribeSubject = new Subject<void>();
 
-  public constructor(private router: Router) {}
-
-  public ngOnInit() {}
+  public constructor(
+    private notificationService: NotificationService,
+    private router: Router
+  ) {}
 
   public ngOnChanges() {
-    this.displayedColumns = [
-      'status',
-      'account',
-      'platform',
-      'transactions',
-      'balance',
-      'value',
-      'currency',
-      'valueInBaseCurrency',
-      'comment'
-    ];
+    this.displayedColumns = ['status', 'account', 'platform'];
+
+    if (this.showTransactions) {
+      this.displayedColumns.push('transactions');
+    }
+
+    if (this.showBalance) {
+      this.displayedColumns.push('balance');
+    }
+
+    if (this.showValue) {
+      this.displayedColumns.push('value');
+    }
+
+    this.displayedColumns.push('currency');
+
+    if (this.showValueInBaseCurrency) {
+      this.displayedColumns.push('valueInBaseCurrency');
+    }
+
+    this.displayedColumns.push('comment');
 
     if (this.showActions) {
       this.displayedColumns.push('actions');
@@ -68,33 +89,41 @@ export class AccountsTableComponent implements OnChanges, OnDestroy, OnInit {
 
     this.isLoading = true;
 
-    if (this.accounts) {
-      this.dataSource = new MatTableDataSource(this.accounts);
-      this.dataSource.sort = this.sort;
-      this.dataSource.sortingDataAccessor = get;
+    this.dataSource = new MatTableDataSource(this.accounts);
+    this.dataSource.sort = this.sort;
+    this.dataSource.sortingDataAccessor = get;
 
+    if (this.accounts) {
       this.isLoading = false;
     }
   }
 
   public onDeleteAccount(aId: string) {
-    const confirmation = confirm(
-      $localize`Do you really want to delete this account?`
-    );
-
-    if (confirmation) {
-      this.accountDeleted.emit(aId);
-    }
-  }
-
-  public onOpenAccountDetailDialog(accountId: string) {
-    this.router.navigate([], {
-      queryParams: { accountId, accountDetailDialog: true }
+    this.notificationService.confirm({
+      confirmFn: () => {
+        this.accountDeleted.emit(aId);
+      },
+      confirmType: ConfirmationDialogType.Warn,
+      title: $localize`Do you really want to delete this account?`
     });
   }
 
+  public onOpenAccountDetailDialog(accountId: string) {
+    if (this.hasPermissionToOpenDetails) {
+      this.router.navigate([], {
+        queryParams: { accountId, accountDetailDialog: true }
+      });
+    }
+  }
+
   public onOpenComment(aComment: string) {
-    alert(aComment);
+    this.notificationService.alert({
+      title: aComment
+    });
+  }
+
+  public onTransferBalance() {
+    this.transferBalance.emit();
   }
 
   public onUpdateAccount(aAccount: AccountModel) {

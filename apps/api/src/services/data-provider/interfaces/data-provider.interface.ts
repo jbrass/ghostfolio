@@ -1,34 +1,43 @@
-import { LookupItem } from '@ghostfolio/api/app/symbol/interfaces/lookup-item.interface';
 import {
   IDataProviderHistoricalResponse,
   IDataProviderResponse
 } from '@ghostfolio/api/services/interfaces/interfaces';
+import {
+  DataProviderInfo,
+  LookupResponse
+} from '@ghostfolio/common/interfaces';
 import { Granularity } from '@ghostfolio/common/types';
+
 import { DataSource, SymbolProfile } from '@prisma/client';
 
 export interface DataProviderInterface {
   canHandle(symbol: string): boolean;
 
-  getAssetProfile(aSymbol: string): Promise<Partial<SymbolProfile>>;
+  getAssetProfile({
+    symbol
+  }: {
+    symbol: string;
+  }): Promise<Partial<SymbolProfile>>;
+
+  getDataProviderInfo(): DataProviderInfo;
 
   getDividends({
     from,
     granularity,
+    requestTimeout,
     symbol,
     to
-  }: {
-    from: Date;
-    granularity: Granularity;
-    symbol: string;
-    to: Date;
-  }): Promise<{ [date: string]: IDataProviderHistoricalResponse }>;
+  }: GetDividendsParams): Promise<{
+    [date: string]: IDataProviderHistoricalResponse;
+  }>;
 
-  getHistorical(
-    aSymbol: string,
-    aGranularity: Granularity,
-    from: Date,
-    to: Date
-  ): Promise<{
+  getHistorical({
+    from,
+    granularity,
+    requestTimeout,
+    symbol,
+    to
+  }: GetHistoricalParams): Promise<{
     [symbol: string]: { [date: string]: IDataProviderHistoricalResponse };
   }>; // TODO: Return only one symbol
 
@@ -36,17 +45,39 @@ export interface DataProviderInterface {
 
   getName(): DataSource;
 
-  getQuotes(
-    aSymbols: string[]
-  ): Promise<{ [symbol: string]: IDataProviderResponse }>;
+  getQuotes({
+    requestTimeout,
+    symbols
+  }: GetQuotesParams): Promise<{ [symbol: string]: IDataProviderResponse }>;
 
   getTestSymbol(): string;
 
-  search({
-    includeIndices,
-    query
-  }: {
-    includeIndices?: boolean;
-    query: string;
-  }): Promise<{ items: LookupItem[] }>;
+  search({ includeIndices, query }: GetSearchParams): Promise<LookupResponse>;
+}
+
+export interface GetDividendsParams {
+  from: Date;
+  granularity?: Granularity;
+  requestTimeout?: number;
+  symbol: string;
+  to: Date;
+}
+
+export interface GetHistoricalParams {
+  from: Date;
+  granularity?: Granularity;
+  requestTimeout?: number;
+  symbol: string;
+  to: Date;
+}
+
+export interface GetQuotesParams {
+  requestTimeout?: number;
+  symbols: string[];
+}
+
+export interface GetSearchParams {
+  includeIndices?: boolean;
+  query: string;
+  userId?: string;
 }

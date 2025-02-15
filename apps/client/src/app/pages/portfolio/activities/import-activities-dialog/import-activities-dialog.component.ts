@@ -1,3 +1,9 @@
+import { CreateAccountDto } from '@ghostfolio/api/app/account/create-account.dto';
+import { Activity } from '@ghostfolio/api/app/order/interfaces/activities.interface';
+import { DataService } from '@ghostfolio/client/services/data.service';
+import { ImportActivitiesService } from '@ghostfolio/client/services/import-activities.service';
+import { PortfolioPosition } from '@ghostfolio/common/interfaces';
+
 import {
   StepperOrientation,
   StepperSelectionEvent
@@ -12,14 +18,12 @@ import {
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { SortDirection } from '@angular/material/sort';
 import { MatStepper } from '@angular/material/stepper';
-import { CreateAccountDto } from '@ghostfolio/api/app/account/create-account.dto';
-import { Activity } from '@ghostfolio/api/app/order/interfaces/activities.interface';
-import { DataService } from '@ghostfolio/client/services/data.service';
-import { ImportActivitiesService } from '@ghostfolio/client/services/import-activities.service';
-import { Position } from '@ghostfolio/common/interfaces';
+import { MatTableDataSource } from '@angular/material/table';
 import { AssetClass } from '@prisma/client';
 import { isArray, sortBy } from 'lodash';
+import ms from 'ms';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject, takeUntil } from 'rxjs';
 
@@ -30,23 +34,28 @@ import { ImportActivitiesDialogParams } from './interfaces/interfaces';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'gf-import-activities-dialog',
   styleUrls: ['./import-activities-dialog.scss'],
-  templateUrl: 'import-activities-dialog.html'
+  templateUrl: 'import-activities-dialog.html',
+  standalone: false
 })
 export class ImportActivitiesDialog implements OnDestroy {
   public accounts: CreateAccountDto[] = [];
   public activities: Activity[] = [];
+  public assetProfileForm: FormGroup;
+  public dataSource: MatTableDataSource<Activity>;
   public details: any[] = [];
   public deviceType: string;
   public dialogTitle = $localize`Import Activities`;
   public errorMessages: string[] = [];
-  public holdings: Position[] = [];
+  public holdings: PortfolioPosition[] = [];
   public importStep: ImportStep = ImportStep.UPLOAD_FILE;
   public isLoading = false;
   public maxSafeInteger = Number.MAX_SAFE_INTEGER;
   public mode: 'DIVIDEND';
   public selectedActivities: Activity[] = [];
+  public sortColumn = 'date';
+  public sortDirection: SortDirection = 'desc';
   public stepperOrientation: StepperOrientation;
-  public uniqueAssetForm: FormGroup;
+  public totalItems: number;
 
   private unsubscribeSubject = new Subject<void>();
 
@@ -66,8 +75,8 @@ export class ImportActivitiesDialog implements OnDestroy {
     this.stepperOrientation =
       this.deviceType === 'mobile' ? 'vertical' : 'horizontal';
 
-    this.uniqueAssetForm = this.formBuilder.group({
-      uniqueAsset: [undefined, Validators.required]
+    this.assetProfileForm = this.formBuilder.group({
+      assetProfileIdentifier: [undefined, Validators.required]
     });
 
     if (
@@ -78,24 +87,28 @@ export class ImportActivitiesDialog implements OnDestroy {
 
       this.dialogTitle = $localize`Import Dividends`;
       this.mode = 'DIVIDEND';
-      this.uniqueAssetForm.controls['uniqueAsset'].disable();
+      this.assetProfileForm.get('assetProfileIdentifier').disable();
 
       this.dataService
-        .fetchPositions({
+        .fetchPortfolioHoldings({
           filters: [
             {
               id: AssetClass.EQUITY,
+              type: 'ASSET_CLASS'
+            },
+            {
+              id: AssetClass.FIXED_INCOME,
               type: 'ASSET_CLASS'
             }
           ],
           range: 'max'
         })
         .pipe(takeUntil(this.unsubscribeSubject))
-        .subscribe(({ positions }) => {
-          this.holdings = sortBy(positions, ({ name }) => {
+        .subscribe(({ holdings }) => {
+          this.holdings = sortBy(holdings, ({ name }) => {
             return name.toLowerCase();
           });
-          this.uniqueAssetForm.controls['uniqueAsset'].enable();
+          this.assetProfileForm.get('assetProfileIdentifier').enable();
 
           this.isLoading = false;
 
@@ -121,7 +134,7 @@ export class ImportActivitiesDialog implements OnDestroy {
         '✅ ' + $localize`Import has been completed`,
         undefined,
         {
-          duration: 3000
+          duration: ms('3 seconds')
         }
       );
     } catch (error) {
@@ -130,7 +143,9 @@ export class ImportActivitiesDialog implements OnDestroy {
           ' ' +
           $localize`Please try again later.`,
         $localize`Okay`,
-        { duration: 3000 }
+        {
+          duration: ms('3 seconds')
+        }
       );
     } finally {
       this.dialogRef.close();
@@ -143,7 +158,7 @@ export class ImportActivitiesDialog implements OnDestroy {
   }: {
     files: FileList;
     stepper: MatStepper;
-  }): void {
+  }) {
     if (files.length === 0) {
       return;
     }
@@ -160,10 +175,11 @@ export class ImportActivitiesDialog implements OnDestroy {
   }
 
   public onLoadDividends(aStepper: MatStepper) {
-    this.uniqueAssetForm.controls['uniqueAsset'].disable();
+    this.assetProfileForm.get('assetProfileIdentifier').disable();
 
-    const { dataSource, symbol } =
-      this.uniqueAssetForm.controls['uniqueAsset'].value;
+    const { dataSource, symbol } = this.assetProfileForm.get(
+      'assetProfileIdentifier'
+    ).value;
 
     this.dataService
       .fetchDividendsImport({
@@ -173,6 +189,8 @@ export class ImportActivitiesDialog implements OnDestroy {
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe(({ activities }) => {
         this.activities = activities;
+        this.dataSource = new MatTableDataSource(activities.reverse());
+        this.totalItems = activities.length;
 
         aStepper.next();
 
@@ -184,7 +202,7 @@ export class ImportActivitiesDialog implements OnDestroy {
     this.details = [];
     this.errorMessages = [];
     this.importStep = ImportStep.SELECT_ACTIVITIES;
-    this.uniqueAssetForm.controls['uniqueAsset'].enable();
+    this.assetProfileForm.get('assetProfileIdentifier').enable();
 
     aStepper.reset();
   }
@@ -252,6 +270,14 @@ export class ImportActivitiesDialog implements OnDestroy {
             }
           }
 
+          content.activities = content.activities.map((activity) => {
+            if (activity.id) {
+              delete activity.id;
+            }
+
+            return activity;
+          });
+
           try {
             const { activities } =
               await this.importActivitiesService.importJson({
@@ -260,6 +286,8 @@ export class ImportActivitiesDialog implements OnDestroy {
                 isDryRun: true
               });
             this.activities = activities;
+            this.dataSource = new MatTableDataSource(activities.reverse());
+            this.totalItems = activities.length;
           } catch (error) {
             console.error(error);
             this.handleImportError({ error, activities: content.activities });
@@ -267,6 +295,8 @@ export class ImportActivitiesDialog implements OnDestroy {
 
           return;
         } else if (file.name.endsWith('.csv')) {
+          const content = fileContent.split('\n').slice(1);
+
           try {
             const data = await this.importActivitiesService.importCsv({
               fileContent,
@@ -274,10 +304,12 @@ export class ImportActivitiesDialog implements OnDestroy {
               userAccounts: this.data.user.accounts
             });
             this.activities = data.activities;
+            this.dataSource = new MatTableDataSource(data.activities.reverse());
+            this.totalItems = data.activities.length;
           } catch (error) {
             console.error(error);
             this.handleImportError({
-              activities: error?.activities ?? [],
+              activities: error?.activities ?? content,
               error: {
                 error: { message: error?.error?.message ?? [error?.message] }
               }

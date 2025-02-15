@@ -1,34 +1,39 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
-import { ActivatedRoute, Router } from '@angular/router';
 import { CreateAccountDto } from '@ghostfolio/api/app/account/create-account.dto';
+import { TransferBalanceDto } from '@ghostfolio/api/app/account/transfer-balance.dto';
 import { UpdateAccountDto } from '@ghostfolio/api/app/account/update-account.dto';
 import { AccountDetailDialog } from '@ghostfolio/client/components/account-detail-dialog/account-detail-dialog.component';
 import { AccountDetailDialogParams } from '@ghostfolio/client/components/account-detail-dialog/interfaces/interfaces';
+import { NotificationService } from '@ghostfolio/client/core/notification/notification.service';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { ImpersonationStorageService } from '@ghostfolio/client/services/impersonation-storage.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
 import { User } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Account as AccountModel } from '@prisma/client';
 import { DeviceDetectorService } from 'ngx-device-detector';
-import { Subject, Subscription } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { EMPTY, Subject, Subscription } from 'rxjs';
+import { catchError, takeUntil } from 'rxjs/operators';
 
 import { CreateOrUpdateAccountDialog } from './create-or-update-account-dialog/create-or-update-account-dialog.component';
+import { TransferBalanceDialog } from './transfer-balance/transfer-balance-dialog.component';
 
 @Component({
-  host: { class: 'page' },
+  host: { class: 'has-fab page' },
   selector: 'gf-accounts-page',
   styleUrls: ['./accounts-page.scss'],
-  templateUrl: './accounts-page.html'
+  templateUrl: './accounts-page.html',
+  standalone: false
 })
 export class AccountsPageComponent implements OnDestroy, OnInit {
   public accounts: AccountModel[];
   public deviceType: string;
   public hasImpersonationId: boolean;
   public hasPermissionToCreateAccount: boolean;
-  public hasPermissionToDeleteAccount: boolean;
+  public hasPermissionToUpdateAccount: boolean;
   public routeQueryParams: Subscription;
   public totalBalanceInBaseCurrency = 0;
   public totalValueInBaseCurrency = 0;
@@ -43,6 +48,7 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
     private deviceService: DeviceDetectorService,
     private dialog: MatDialog,
     private impersonationStorageService: ImpersonationStorageService,
+    private notificationService: NotificationService,
     private route: ActivatedRoute,
     private router: Router,
     private userService: UserService
@@ -67,6 +73,8 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
           } else {
             this.router.navigate(['.'], { relativeTo: this.route });
           }
+        } else if (params['transferBalanceDialog']) {
+          this.openTransferBalanceDialog();
         }
       });
   }
@@ -91,9 +99,9 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
             this.user.permissions,
             permissions.createAccount
           );
-          this.hasPermissionToDeleteAccount = hasPermission(
+          this.hasPermissionToUpdateAccount = hasPermission(
             this.user.permissions,
-            permissions.deleteAccount
+            permissions.updateAccount
           );
 
           this.changeDetectorRef.markForCheck();
@@ -129,19 +137,25 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
   }
 
   public onDeleteAccount(aId: string) {
+    this.reset();
+
     this.dataService
       .deleteAccount(aId)
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe({
-        next: () => {
-          this.userService
-            .get(true)
-            .pipe(takeUntil(this.unsubscribeSubject))
-            .subscribe();
+      .subscribe(() => {
+        this.userService
+          .get(true)
+          .pipe(takeUntil(this.unsubscribeSubject))
+          .subscribe();
 
-          this.fetchAccounts();
-        }
+        this.fetchAccounts();
       });
+  }
+
+  public onTransferBalance() {
+    this.router.navigate([], {
+      queryParams: { transferBalanceDialog: true }
+    });
   }
 
   public onUpdateAccount(aAccount: AccountModel) {
@@ -158,7 +172,7 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
     isExcluded,
     name,
     platformId
-  }: AccountModel): void {
+  }: AccountModel) {
     const dialogRef = this.dialog.open(CreateOrUpdateAccountDialog, {
       data: {
         account: {
@@ -171,30 +185,30 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
           platformId
         }
       },
-      height: this.deviceType === 'mobile' ? '97.5vh' : '80vh',
+      height: this.deviceType === 'mobile' ? '98vh' : '80vh',
       width: this.deviceType === 'mobile' ? '100vw' : '50rem'
     });
 
     dialogRef
       .afterClosed()
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe((data: any) => {
-        const account: UpdateAccountDto = data?.account;
-
+      .subscribe((account: UpdateAccountDto | null) => {
         if (account) {
+          this.reset();
+
           this.dataService
             .putAccount(account)
             .pipe(takeUntil(this.unsubscribeSubject))
-            .subscribe({
-              next: () => {
-                this.userService
-                  .get(true)
-                  .pipe(takeUntil(this.unsubscribeSubject))
-                  .subscribe();
+            .subscribe(() => {
+              this.userService
+                .get(true)
+                .pipe(takeUntil(this.unsubscribeSubject))
+                .subscribe();
 
-                this.fetchAccounts();
-              }
+              this.fetchAccounts();
             });
+
+          this.changeDetectorRef.markForCheck();
         }
 
         this.router.navigate(['.'], { relativeTo: this.route });
@@ -209,12 +223,16 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
   private openAccountDetailDialog(aAccountId: string) {
     const dialogRef = this.dialog.open(AccountDetailDialog, {
       autoFocus: false,
-      data: <AccountDetailDialogParams>{
+      data: {
         accountId: aAccountId,
         deviceType: this.deviceType,
-        hasImpersonationId: this.hasImpersonationId
-      },
-      height: this.deviceType === 'mobile' ? '97.5vh' : '80vh',
+        hasImpersonationId: this.hasImpersonationId,
+        hasPermissionToCreateOrder:
+          !this.hasImpersonationId &&
+          hasPermission(this.user?.permissions, permissions.createOrder) &&
+          !this.user?.settings?.isRestrictedView
+      } as AccountDetailDialogParams,
+      height: this.deviceType === 'mobile' ? '98vh' : '80vh',
       width: this.deviceType === 'mobile' ? '100vw' : '50rem'
     });
 
@@ -222,11 +240,13 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
       .afterClosed()
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe(() => {
+        this.fetchAccounts();
+
         this.router.navigate(['.'], { relativeTo: this.route });
       });
   }
 
-  private openCreateAccountDialog(): void {
+  private openCreateAccountDialog() {
     const dialogRef = this.dialog.open(CreateOrUpdateAccountDialog, {
       data: {
         account: {
@@ -238,7 +258,41 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
           platformId: null
         }
       },
-      height: this.deviceType === 'mobile' ? '97.5vh' : '80vh',
+      height: this.deviceType === 'mobile' ? '98vh' : '80vh',
+      width: this.deviceType === 'mobile' ? '100vw' : '50rem'
+    });
+
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntil(this.unsubscribeSubject))
+      .subscribe((account: CreateAccountDto | null) => {
+        if (account) {
+          this.reset();
+
+          this.dataService
+            .postAccount(account)
+            .pipe(takeUntil(this.unsubscribeSubject))
+            .subscribe(() => {
+              this.userService
+                .get(true)
+                .pipe(takeUntil(this.unsubscribeSubject))
+                .subscribe();
+
+              this.fetchAccounts();
+            });
+
+          this.changeDetectorRef.markForCheck();
+        }
+
+        this.router.navigate(['.'], { relativeTo: this.route });
+      });
+  }
+
+  private openTransferBalanceDialog() {
+    const dialogRef = this.dialog.open(TransferBalanceDialog, {
+      data: {
+        accounts: this.accounts
+      },
       width: this.deviceType === 'mobile' ? '100vw' : '50rem'
     });
 
@@ -246,25 +300,43 @@ export class AccountsPageComponent implements OnDestroy, OnInit {
       .afterClosed()
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe((data: any) => {
-        const account: CreateAccountDto = data?.account;
+        if (data) {
+          this.reset();
 
-        if (account) {
+          const { accountIdFrom, accountIdTo, balance }: TransferBalanceDto =
+            data?.account;
+
           this.dataService
-            .postAccount(account)
-            .pipe(takeUntil(this.unsubscribeSubject))
-            .subscribe({
-              next: () => {
-                this.userService
-                  .get(true)
-                  .pipe(takeUntil(this.unsubscribeSubject))
-                  .subscribe();
+            .transferAccountBalance({
+              accountIdFrom,
+              accountIdTo,
+              balance
+            })
+            .pipe(
+              catchError(() => {
+                this.notificationService.alert({
+                  title: $localize`Oops, cash balance transfer has failed.`
+                });
 
-                this.fetchAccounts();
-              }
+                return EMPTY;
+              }),
+              takeUntil(this.unsubscribeSubject)
+            )
+            .subscribe(() => {
+              this.fetchAccounts();
             });
+
+          this.changeDetectorRef.markForCheck();
         }
 
         this.router.navigate(['.'], { relativeTo: this.route });
       });
+  }
+
+  private reset() {
+    this.accounts = undefined;
+    this.totalBalanceInBaseCurrency = 0;
+    this.totalValueInBaseCurrency = 0;
+    this.transactionCount = 0;
   }
 }

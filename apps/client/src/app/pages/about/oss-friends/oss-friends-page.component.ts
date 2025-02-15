@@ -6,14 +6,13 @@ const ossFriends = require('../../../../assets/oss-friends.json');
 @Component({
   selector: 'gf-oss-friends-page',
   styleUrls: ['./oss-friends-page.scss'],
-  templateUrl: './oss-friends-page.html'
+  templateUrl: './oss-friends-page.html',
+  standalone: false
 })
 export class OpenSourceSoftwareFriendsPageComponent implements OnDestroy {
   public ossFriends = ossFriends.data;
 
   private unsubscribeSubject = new Subject<void>();
-
-  public constructor() {}
 
   public ngOnDestroy() {
     this.unsubscribeSubject.next();

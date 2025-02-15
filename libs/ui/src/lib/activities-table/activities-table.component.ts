@@ -1,5 +1,21 @@
+import { Activity } from '@ghostfolio/api/app/order/interfaces/activities.interface';
+import { GfAssetProfileIconComponent } from '@ghostfolio/client/components/asset-profile-icon/asset-profile-icon.component';
+import { ConfirmationDialogType } from '@ghostfolio/client/core/notification/confirmation-dialog/confirmation-dialog.type';
+import { NotificationService } from '@ghostfolio/client/core/notification/notification.service';
+import { GfSymbolModule } from '@ghostfolio/client/pipes/symbol/symbol.module';
+import { DEFAULT_PAGE_SIZE } from '@ghostfolio/common/config';
+import { getDateFormatString, getLocale } from '@ghostfolio/common/helper';
+import { AssetProfileIdentifier } from '@ghostfolio/common/interfaces';
+import { OrderWithAccount } from '@ghostfolio/common/types';
+import { GfActivityTypeComponent } from '@ghostfolio/ui/activity-type';
+import { GfNoTransactionsInfoComponent } from '@ghostfolio/ui/no-transactions-info';
+import { GfValueComponent } from '@ghostfolio/ui/value';
+
 import { SelectionModel } from '@angular/cdk/collections';
+import { CommonModule } from '@angular/common';
 import {
+  AfterViewInit,
+  CUSTOM_ELEMENTS_SCHEMA,
   ChangeDetectionStrategy,
   Component,
   EventEmitter,
@@ -10,85 +26,101 @@ import {
   Output,
   ViewChild
 } from '@angular/core';
-import { MatPaginator, PageEvent } from '@angular/material/paginator';
-import { MatSort } from '@angular/material/sort';
-import { MatTableDataSource } from '@angular/material/table';
-import { Router } from '@angular/router';
-import { Activity } from '@ghostfolio/api/app/order/interfaces/activities.interface';
-import { DEFAULT_PAGE_SIZE } from '@ghostfolio/common/config';
-import { getDateFormatString } from '@ghostfolio/common/helper';
-import { Filter, UniqueAsset } from '@ghostfolio/common/interfaces';
-import { OrderWithAccount } from '@ghostfolio/common/types';
-import { translate } from '@ghostfolio/ui/i18n';
-import Big from 'big.js';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatMenuModule } from '@angular/material/menu';
+import {
+  MatPaginator,
+  MatPaginatorModule,
+  PageEvent
+} from '@angular/material/paginator';
+import {
+  MatSort,
+  MatSortModule,
+  Sort,
+  SortDirection
+} from '@angular/material/sort';
+import { MatTableDataSource, MatTableModule } from '@angular/material/table';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { isUUID } from 'class-validator';
-import { endOfToday, format, isAfter } from 'date-fns';
-import { get, isNumber } from 'lodash';
-import { Subject, Subscription, distinctUntilChanged, takeUntil } from 'rxjs';
+import { endOfToday, isAfter } from 'date-fns';
+import { NgxSkeletonLoaderModule } from 'ngx-skeleton-loader';
+import { Subject, Subscription, takeUntil } from 'rxjs';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    CommonModule,
+    GfActivityTypeComponent,
+    GfAssetProfileIconComponent,
+    GfNoTransactionsInfoComponent,
+    GfSymbolModule,
+    GfValueComponent,
+    MatButtonModule,
+    MatCheckboxModule,
+    MatMenuModule,
+    MatPaginatorModule,
+    MatSortModule,
+    MatTableModule,
+    MatTooltipModule,
+    NgxSkeletonLoaderModule
+  ],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
   selector: 'gf-activities-table',
   styleUrls: ['./activities-table.component.scss'],
   templateUrl: './activities-table.component.html'
 })
-export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
-  @Input() activities: Activity[];
+export class GfActivitiesTableComponent
+  implements AfterViewInit, OnChanges, OnDestroy, OnInit
+{
   @Input() baseCurrency: string;
+  @Input() dataSource: MatTableDataSource<Activity>;
   @Input() deviceType: string;
   @Input() hasPermissionToCreateActivity: boolean;
+  @Input() hasPermissionToDeleteActivity: boolean;
   @Input() hasPermissionToExportActivities: boolean;
-  @Input() hasPermissionToFilter = true;
   @Input() hasPermissionToOpenDetails = true;
-  @Input() locale: string;
+  @Input() locale = getLocale();
+  @Input() pageIndex: number;
   @Input() pageSize = DEFAULT_PAGE_SIZE;
   @Input() showActions = true;
   @Input() showCheckbox = false;
-  @Input() showFooter = true;
   @Input() showNameColumn = true;
+  @Input() sortColumn: string;
+  @Input() sortDirection: SortDirection;
+  @Input() sortDisabled = false;
+  @Input() totalItems = Number.MAX_SAFE_INTEGER;
 
+  @Output() activitiesDeleted = new EventEmitter<void>();
+  @Output() activityClicked = new EventEmitter<AssetProfileIdentifier>();
   @Output() activityDeleted = new EventEmitter<string>();
   @Output() activityToClone = new EventEmitter<OrderWithAccount>();
   @Output() activityToUpdate = new EventEmitter<OrderWithAccount>();
-  @Output() deleteAllActivities = new EventEmitter<void>();
-  @Output() export = new EventEmitter<string[]>();
+  @Output() export = new EventEmitter<void>();
   @Output() exportDrafts = new EventEmitter<string[]>();
   @Output() import = new EventEmitter<void>();
-  @Output() importDividends = new EventEmitter<UniqueAsset>();
+  @Output() importDividends = new EventEmitter<AssetProfileIdentifier>();
+  @Output() pageChanged = new EventEmitter<PageEvent>();
   @Output() selectedActivities = new EventEmitter<Activity[]>();
+  @Output() sortChanged = new EventEmitter<Sort>();
 
   @ViewChild(MatPaginator) paginator: MatPaginator;
   @ViewChild(MatSort) sort: MatSort;
 
-  public allFilters: Filter[];
-  public dataSource: MatTableDataSource<Activity> = new MatTableDataSource();
   public defaultDateFormat: string;
   public displayedColumns = [];
   public endOfToday = endOfToday();
-  public filters$ = new Subject<Filter[]>();
   public hasDrafts = false;
   public hasErrors = false;
   public isAfter = isAfter;
   public isLoading = true;
   public isUUID = isUUID;
-  public pageIndex = 0;
-  public placeholder = '';
   public routeQueryParams: Subscription;
-  public searchKeywords: string[] = [];
   public selectedRows = new SelectionModel<Activity>(true, []);
-  public totalFees: number;
-  public totalValue: number;
 
-  private readonly SEARCH_STRING_SEPARATOR = ',';
   private unsubscribeSubject = new Subject<void>();
 
-  public constructor(private router: Router) {
-    this.filters$
-      .pipe(distinctUntilChanged(), takeUntil(this.unsubscribeSubject))
-      .subscribe((filters) => {
-        this.updateFilters(filters);
-      });
-  }
+  public constructor(private notificationService: NotificationService) {}
 
   public ngOnInit() {
     if (this.showCheckbox) {
@@ -101,6 +133,12 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
     }
   }
 
+  public ngAfterViewInit() {
+    this.sort.sortChange.subscribe((value: Sort) => {
+      this.sortChanged.emit(value);
+    });
+  }
+
   public areAllRowsSelected() {
     const numSelectedRows = this.selectedRows.selected.length;
     const numTotalRows = this.dataSource.data.length;
@@ -108,13 +146,15 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   public ngOnChanges() {
+    this.defaultDateFormat = getDateFormatString(this.locale);
+
     this.displayedColumns = [
       'select',
       'importStatus',
-      'count',
-      'date',
-      'type',
+      'icon',
       'nameWithSymbol',
+      'type',
+      'date',
       'quantity',
       'unitPrice',
       'fee',
@@ -126,11 +166,7 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
       'actions'
     ];
 
-    if (this.showCheckbox) {
-      this.displayedColumns = this.displayedColumns.filter((column) => {
-        return column !== 'count';
-      });
-    } else {
+    if (!this.showCheckbox) {
       this.displayedColumns = this.displayedColumns.filter((column) => {
         return column !== 'importStatus' && column !== 'select';
       });
@@ -142,60 +178,13 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
       });
     }
 
-    this.defaultDateFormat = getDateFormatString(this.locale);
-
-    if (this.activities) {
-      this.activities = this.activities.map((activity) => {
-        return {
-          ...activity,
-          error: activity.error
-            ? {
-                ...activity.error,
-                message: translate(
-                  `IMPORT_ACTIVITY_ERROR_${activity.error.code}`
-                )
-              }
-            : undefined
-        };
-      });
-
-      this.allFilters = this.getSearchableFieldValues(this.activities);
-
-      this.dataSource = new MatTableDataSource(this.activities);
-      this.dataSource.filterPredicate = (data, filter) => {
-        const filterableLabels = this.getFilterableValues(data).map(
-          ({ label }) => {
-            return label.toLowerCase();
-          }
-        );
-
-        let includes = true;
-        for (const singleFilter of filter.split(this.SEARCH_STRING_SEPARATOR)) {
-          includes =
-            includes &&
-            filterableLabels.includes(singleFilter.trim().toLowerCase());
-        }
-        return includes;
-      };
-      this.dataSource.paginator = this.paginator;
-      this.dataSource.sort = this.sort;
-      this.dataSource.sortingDataAccessor = get;
-
-      this.updateFilters();
-
-      this.hasErrors = this.activities.some(({ error }) => {
-        return !!error;
-      });
-    } else {
-      this.hasErrors = false;
+    if (this.dataSource) {
+      this.isLoading = false;
     }
   }
 
   public onChangePage(page: PageEvent) {
-    this.pageIndex = page.pageIndex;
-
-    this.totalFees = this.getTotalFees();
-    this.totalValue = this.getTotalValue();
+    this.pageChanged.emit(page);
   }
 
   public onClickActivity(activity: Activity) {
@@ -205,13 +194,11 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
       }
     } else if (
       this.hasPermissionToOpenDetails &&
-      !activity.isDraft &&
-      activity.type !== 'FEE' &&
-      activity.type !== 'INTEREST' &&
-      activity.type !== 'ITEM' &&
-      activity.type !== 'LIABILITY'
+      activity.Account?.isExcluded !== true &&
+      activity.isDraft === false &&
+      ['BUY', 'DIVIDEND', 'SELL'].includes(activity.type)
     ) {
-      this.onOpenPositionDialog({
+      this.activityClicked.emit({
         dataSource: activity.SymbolProfile.dataSource,
         symbol: activity.SymbolProfile.symbol
       });
@@ -222,26 +209,28 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
     this.activityToClone.emit(aActivity);
   }
 
-  public onDeleteActivity(aId: string) {
-    const confirmation = confirm(
-      $localize`Do you really want to delete this activity?`
-    );
+  public onDeleteActivities() {
+    this.notificationService.confirm({
+      confirmFn: () => {
+        this.activitiesDeleted.emit();
+      },
+      confirmType: ConfirmationDialogType.Warn,
+      title: $localize`Do you really want to delete these activities?`
+    });
+  }
 
-    if (confirmation) {
-      this.activityDeleted.emit(aId);
-    }
+  public onDeleteActivity(aId: string) {
+    this.notificationService.confirm({
+      confirmFn: () => {
+        this.activityDeleted.emit(aId);
+      },
+      confirmType: ConfirmationDialogType.Warn,
+      title: $localize`Do you really want to delete this activity?`
+    });
   }
 
   public onExport() {
-    if (this.searchKeywords.length > 0) {
-      this.export.emit(
-        this.dataSource.filteredData.map((activity) => {
-          return activity.id;
-        })
-      );
-    } else {
-      this.export.emit();
-    }
+    this.export.emit();
   }
 
   public onExportDraft(aActivityId: string) {
@@ -260,10 +249,6 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
     );
   }
 
-  public onDeleteAllActivities() {
-    this.deleteAllActivities.emit();
-  }
-
   public onImport() {
     this.import.emit();
   }
@@ -273,12 +258,8 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   public onOpenComment(aComment: string) {
-    alert(aComment);
-  }
-
-  public onOpenPositionDialog({ dataSource, symbol }: UniqueAsset): void {
-    this.router.navigate([], {
-      queryParams: { dataSource, symbol, positionDetailDialog: true }
+    this.notificationService.alert({
+      title: aComment
     });
   }
 
@@ -287,9 +268,13 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   public toggleAllRows() {
-    this.areAllRowsSelected()
-      ? this.selectedRows.clear()
-      : this.dataSource.data.forEach((row) => this.selectedRows.select(row));
+    if (this.areAllRowsSelected()) {
+      this.selectedRows.clear();
+    } else {
+      this.dataSource.data.forEach((row) => {
+        this.selectedRows.select(row);
+      });
+    }
 
     this.selectedActivities.emit(this.selectedRows.selected);
   }
@@ -297,146 +282,5 @@ export class ActivitiesTableComponent implements OnChanges, OnDestroy, OnInit {
   public ngOnDestroy() {
     this.unsubscribeSubject.next();
     this.unsubscribeSubject.complete();
-  }
-
-  private getFilterableValues(
-    activity: OrderWithAccount,
-    fieldValueMap: { [id: string]: Filter } = {}
-  ): Filter[] {
-    if (activity.Account?.id) {
-      fieldValueMap[activity.Account.id] = {
-        id: activity.Account.id,
-        label: activity.Account.name,
-        type: 'ACCOUNT'
-      };
-    }
-
-    if (activity.SymbolProfile?.currency) {
-      fieldValueMap[activity.SymbolProfile.currency] = {
-        id: activity.SymbolProfile.currency,
-        label: activity.SymbolProfile.currency,
-        type: 'TAG'
-      };
-    }
-
-    if (
-      activity.SymbolProfile?.symbol &&
-      !isUUID(activity.SymbolProfile.symbol)
-    ) {
-      fieldValueMap[activity.SymbolProfile.symbol] = {
-        id: activity.SymbolProfile.symbol,
-        label: activity.SymbolProfile.symbol,
-        type: 'SYMBOL'
-      };
-    }
-
-    fieldValueMap[activity.type] = {
-      id: activity.type,
-      label: activity.type,
-      type: 'TAG'
-    };
-
-    fieldValueMap[format(new Date(activity.date), 'yyyy')] = {
-      id: format(new Date(activity.date), 'yyyy'),
-      label: format(new Date(activity.date), 'yyyy'),
-      type: 'TAG'
-    };
-
-    return Object.values(fieldValueMap);
-  }
-
-  private getPaginatedData() {
-    if (this.dataSource.data.length > this.pageSize) {
-      const sortedData = this.dataSource.sortData(
-        this.dataSource.filteredData,
-        this.dataSource.sort
-      );
-
-      return sortedData.slice(
-        this.pageIndex * this.pageSize,
-        (this.pageIndex + 1) * this.pageSize
-      );
-    }
-    return this.dataSource.filteredData;
-  }
-
-  private getSearchableFieldValues(activities: OrderWithAccount[]): Filter[] {
-    const fieldValueMap: { [id: string]: Filter } = {};
-
-    for (const activity of activities) {
-      this.getFilterableValues(activity, fieldValueMap);
-    }
-
-    return Object.values(fieldValueMap);
-  }
-
-  private getTotalFees() {
-    let totalFees = new Big(0);
-    const paginatedData = this.getPaginatedData();
-    for (const activity of paginatedData) {
-      if (isNumber(activity.feeInBaseCurrency)) {
-        totalFees = totalFees.plus(activity.feeInBaseCurrency);
-      } else {
-        return null;
-      }
-    }
-
-    return totalFees.toNumber();
-  }
-
-  private getTotalValue() {
-    const paginatedData = this.getPaginatedData();
-    let totalValue = new Big(0);
-
-    for (const { type, valueInBaseCurrency } of paginatedData) {
-      if (isNumber(valueInBaseCurrency)) {
-        if (type === 'BUY' || type === 'ITEM') {
-          totalValue = totalValue.plus(valueInBaseCurrency);
-        } else if (
-          type === 'DIVIDEND' ||
-          type === 'FEE' ||
-          type === 'INTEREST' ||
-          type === 'LIABILITY' ||
-          type === 'SELL'
-        ) {
-          return null;
-        }
-      } else {
-        return null;
-      }
-    }
-
-    return totalValue.toNumber();
-  }
-
-  private updateFilters(filters: Filter[] = []) {
-    this.isLoading = true;
-
-    this.dataSource.filter = filters
-      .map((filter) => {
-        return filter.label;
-      })
-      .join(this.SEARCH_STRING_SEPARATOR);
-
-    const lowercaseSearchKeywords = filters.map((filter) => {
-      return filter.label.trim().toLowerCase();
-    });
-
-    this.placeholder =
-      lowercaseSearchKeywords.length <= 0
-        ? $localize`Filter by account, currency, symbol or type...`
-        : '';
-
-    this.searchKeywords = filters.map((filter) => {
-      return filter.label;
-    });
-
-    this.hasDrafts = this.dataSource.filteredData.some((activity) => {
-      return activity.isDraft === true;
-    });
-    this.totalFees = this.getTotalFees();
-    this.totalValue = this.getTotalValue();
-
-    this.isLoading = false;
   }
 }

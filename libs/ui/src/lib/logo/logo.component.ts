@@ -1,4 +1,6 @@
+import { CommonModule } from '@angular/common';
 import {
+  CUSTOM_ELEMENTS_SCHEMA,
   ChangeDetectionStrategy,
   Component,
   HostBinding,
@@ -6,15 +8,15 @@ import {
 } from '@angular/core';
 
 @Component({
-  selector: 'gf-logo',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './logo.component.html',
-  styleUrls: ['./logo.component.scss']
+  imports: [CommonModule],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
+  selector: 'gf-logo',
+  styleUrls: ['./logo.component.scss'],
+  templateUrl: './logo.component.html'
 })
-export class LogoComponent {
+export class GfLogoComponent {
   @HostBinding('class') @Input() size: 'large' | 'medium' = 'medium';
   @Input() label: string;
   @Input() showLabel = true;
-
-  public constructor() {}
 }

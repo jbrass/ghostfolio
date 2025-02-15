@@ -1,11 +1,23 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { ConfirmationDialogType } from '@ghostfolio/client/core/notification/confirmation-dialog/confirmation-dialog.type';
+import { NotificationService } from '@ghostfolio/client/core/notification/notification.service';
 import { AdminService } from '@ghostfolio/client/services/admin.service';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { ImpersonationStorageService } from '@ghostfolio/client/services/impersonation-storage.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
+import { DEFAULT_PAGE_SIZE } from '@ghostfolio/common/config';
 import { getDateFormatString, getEmojiFlag } from '@ghostfolio/common/helper';
-import { AdminData, InfoItem, User } from '@ghostfolio/common/interfaces';
+import { AdminUsers, InfoItem, User } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
+import {
+  ChangeDetectorRef,
+  Component,
+  OnDestroy,
+  OnInit,
+  ViewChild
+} from '@angular/core';
+import { MatPaginator, PageEvent } from '@angular/material/paginator';
+import { MatTableDataSource } from '@angular/material/table';
 import {
   differenceInSeconds,
   formatDistanceToNowStrict,
@@ -17,16 +29,23 @@ import { takeUntil } from 'rxjs/operators';
 @Component({
   selector: 'gf-admin-users',
   styleUrls: ['./admin-users.scss'],
-  templateUrl: './admin-users.html'
+  templateUrl: './admin-users.html',
+  standalone: false
 })
 export class AdminUsersComponent implements OnDestroy, OnInit {
+  @ViewChild(MatPaginator) paginator: MatPaginator;
+
+  public dataSource = new MatTableDataSource<AdminUsers['users'][0]>();
   public defaultDateFormat: string;
+  public displayedColumns: string[] = [];
   public getEmojiFlag = getEmojiFlag;
   public hasPermissionForSubscription: boolean;
   public hasPermissionToImpersonateAllUsers: boolean;
   public info: InfoItem;
+  public isLoading = false;
+  public pageSize = DEFAULT_PAGE_SIZE;
+  public totalItems = 0;
   public user: User;
-  public users: AdminData['users'];
 
   private unsubscribeSubject = new Subject<void>();
 
@@ -35,6 +54,7 @@ export class AdminUsersComponent implements OnDestroy, OnInit {
     private changeDetectorRef: ChangeDetectorRef,
     private dataService: DataService,
     private impersonationStorageService: ImpersonationStorageService,
+    private notificationService: NotificationService,
     private userService: UserService
   ) {
     this.info = this.dataService.fetchInfo();
@@ -43,6 +63,30 @@ export class AdminUsersComponent implements OnDestroy, OnInit {
       this.info?.globalPermissions,
       permissions.enableSubscription
     );
+
+    if (this.hasPermissionForSubscription) {
+      this.displayedColumns = [
+        'index',
+        'user',
+        'country',
+        'registration',
+        'accounts',
+        'activities',
+        'engagementPerDay',
+        'dailyApiRequests',
+        'lastRequest',
+        'actions'
+      ];
+    } else {
+      this.displayedColumns = [
+        'index',
+        'user',
+        'registration',
+        'accounts',
+        'activities',
+        'actions'
+      ];
+    }
 
     this.userService.stateChanged
       .pipe(takeUntil(this.unsubscribeSubject))
@@ -63,7 +107,7 @@ export class AdminUsersComponent implements OnDestroy, OnInit {
   }
 
   public ngOnInit() {
-    this.fetchAdminData();
+    this.fetchUsers();
   }
 
   public formatDistanceToNow(aDateString: string) {
@@ -82,20 +126,18 @@ export class AdminUsersComponent implements OnDestroy, OnInit {
   }
 
   public onDeleteUser(aId: string) {
-    const confirmation = confirm(
-      $localize`Do you really want to delete this user?`
-    );
-
-    if (confirmation) {
-      this.dataService
-        .deleteUser(aId)
-        .pipe(takeUntil(this.unsubscribeSubject))
-        .subscribe({
-          next: () => {
-            this.fetchAdminData();
-          }
-        });
-    }
+    this.notificationService.confirm({
+      confirmFn: () => {
+        this.dataService
+          .deleteUser(aId)
+          .pipe(takeUntil(this.unsubscribeSubject))
+          .subscribe(() => {
+            this.fetchUsers();
+          });
+      },
+      confirmType: ConfirmationDialogType.Warn,
+      title: $localize`Do you really want to delete this user?`
+    });
   }
 
   public onImpersonateUser(aId: string) {
@@ -108,17 +150,35 @@ export class AdminUsersComponent implements OnDestroy, OnInit {
     window.location.reload();
   }
 
+  public onChangePage(page: PageEvent) {
+    this.fetchUsers({
+      pageIndex: page.pageIndex
+    });
+  }
+
   public ngOnDestroy() {
     this.unsubscribeSubject.next();
     this.unsubscribeSubject.complete();
   }
 
-  private fetchAdminData() {
+  private fetchUsers({ pageIndex }: { pageIndex: number } = { pageIndex: 0 }) {
+    this.isLoading = true;
+
+    if (pageIndex === 0 && this.paginator) {
+      this.paginator.pageIndex = 0;
+    }
+
     this.adminService
-      .fetchAdminData()
+      .fetchUsers({
+        skip: pageIndex * this.pageSize,
+        take: this.pageSize
+      })
       .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe(({ users }) => {
-        this.users = users;
+      .subscribe(({ count, users }) => {
+        this.dataSource = new MatTableDataSource(users);
+        this.totalItems = count;
+
+        this.isLoading = false;
 
         this.changeDetectorRef.markForCheck();
       });

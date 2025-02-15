@@ -1,8 +1,9 @@
 export interface Product {
-  component: any;
+  alias?: string;
   founded?: number;
   hasFreePlan?: boolean;
   hasSelfHostingAbility?: boolean;
+  isArchived?: boolean;
   isOpenSource?: boolean;
   key: string;
   languages?: string[];
@@ -10,7 +11,7 @@ export interface Product {
   note?: string;
   origin?: string;
   pricingPerYear?: string;
-  region?: string;
+  regions?: string[];
   slogan?: string;
   useAnonymously?: boolean;
 }

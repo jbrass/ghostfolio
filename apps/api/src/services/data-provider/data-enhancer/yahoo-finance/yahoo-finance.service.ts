@@ -1,7 +1,12 @@
 import { CryptocurrencyService } from '@ghostfolio/api/services/cryptocurrency/cryptocurrency.service';
 import { DataEnhancerInterface } from '@ghostfolio/api/services/data-provider/interfaces/data-enhancer.interface';
-import { DEFAULT_CURRENCY, UNKNOWN_KEY } from '@ghostfolio/common/config';
+import {
+  DEFAULT_CURRENCY,
+  REPLACE_NAME_PARTS,
+  UNKNOWN_KEY
+} from '@ghostfolio/common/config';
 import { isCurrency } from '@ghostfolio/common/helper';
+
 import { Injectable, Logger } from '@nestjs/common';
 import {
   AssetClass,
@@ -10,6 +15,7 @@ import {
   Prisma,
   SymbolProfile
 } from '@prisma/client';
+import { isISIN } from 'class-validator';
 import { countries } from 'countries-list';
 import yahooFinance from 'yahoo-finance2';
 import type { Price } from 'yahoo-finance2/dist/esm/src/modules/quoteSummary-iface';
@@ -28,6 +34,10 @@ export class YahooFinanceDataEnhancerService implements DataEnhancerInterface {
 
     if (symbol.includes('=X') && !symbol.includes(DEFAULT_CURRENCY)) {
       symbol = `${DEFAULT_CURRENCY}${symbol}`;
+    }
+
+    if (symbol.includes(`${DEFAULT_CURRENCY}ZAC`)) {
+      symbol = `${DEFAULT_CURRENCY}ZAc`;
     }
 
     return symbol.replace('=X', '');
@@ -74,6 +84,7 @@ export class YahooFinanceDataEnhancerService implements DataEnhancerInterface {
     response,
     symbol
   }: {
+    requestTimeout?: number;
     response: Partial<SymbolProfile>;
     symbol: string;
   }): Promise<Partial<SymbolProfile>> {
@@ -128,18 +139,11 @@ export class YahooFinanceDataEnhancerService implements DataEnhancerInterface {
     if (name) {
       name = name.replace('&amp;', '&');
 
-      name = name.replace('Amundi Index Solutions - ', '');
-      name = name.replace('iShares ETF (CH) - ', '');
-      name = name.replace('iShares III Public Limited Company - ', '');
-      name = name.replace('iShares V PLC - ', '');
-      name = name.replace('iShares VI Public Limited Company - ', '');
-      name = name.replace('iShares VII PLC - ', '');
-      name = name.replace('Multi Units Luxembourg - ', '');
-      name = name.replace('VanEck ETFs N.V. - ', '');
-      name = name.replace('Vaneck Vectors Ucits Etfs Plc - ', '');
-      name = name.replace('Vanguard Funds Public Limited Company - ', '');
-      name = name.replace('Vanguard Index Funds - ', '');
-      name = name.replace('Xtrackers (IE) Plc - ', '');
+      for (const part of REPLACE_NAME_PARTS) {
+        name = name.replace(part, '');
+      }
+
+      name = name.trim();
     }
 
     if (quoteType === 'FUTURE') {
@@ -156,7 +160,20 @@ export class YahooFinanceDataEnhancerService implements DataEnhancerInterface {
     const response: Partial<SymbolProfile> = {};
 
     try {
-      const symbol = this.convertToYahooFinanceSymbol(aSymbol);
+      let symbol = aSymbol;
+
+      if (isISIN(symbol)) {
+        try {
+          const { quotes } = await yahooFinance.search(symbol);
+
+          if (quotes?.[0]?.symbol) {
+            symbol = quotes[0].symbol;
+          }
+        } catch {}
+      } else {
+        symbol = this.convertToYahooFinanceSymbol(symbol);
+      }
+
       const assetProfile = await yahooFinance.quoteSummary(symbol, {
         modules: ['price', 'summaryProfile', 'topHoldings']
       });
@@ -176,9 +193,11 @@ export class YahooFinanceDataEnhancerService implements DataEnhancerInterface {
         shortName: assetProfile.price.shortName,
         symbol: assetProfile.price.symbol
       });
-      response.symbol = aSymbol;
+      response.symbol = this.convertFromYahooFinanceSymbol(
+        assetProfile.price.symbol
+      );
 
-      if (assetSubClass === AssetSubClass.MUTUALFUND) {
+      if (['ETF', 'MUTUALFUND'].includes(assetSubClass)) {
         response.sectors = [];
 
         for (const sectorWeighting of assetProfile.topHoldings
@@ -188,7 +207,7 @@ export class YahooFinanceDataEnhancerService implements DataEnhancerInterface {
           }
         }
       } else if (
-        assetSubClass === AssetSubClass.STOCK &&
+        assetSubClass === 'STOCK' &&
         assetProfile.summaryProfile?.country
       ) {
         // Add country if asset is stock and country available
@@ -244,7 +263,7 @@ export class YahooFinanceDataEnhancerService implements DataEnhancerInterface {
 
     switch (quoteType?.toLowerCase()) {
       case 'cryptocurrency':
-        assetClass = AssetClass.CASH;
+        assetClass = AssetClass.LIQUIDITY;
         assetSubClass = AssetSubClass.CRYPTOCURRENCY;
         break;
       case 'equity':

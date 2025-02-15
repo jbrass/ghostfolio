@@ -1,16 +1,18 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { ToggleComponent } from '@ghostfolio/client/components/toggle/toggle.component';
+import { LayoutService } from '@ghostfolio/client/core/layout.service';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { ImpersonationStorageService } from '@ghostfolio/client/services/impersonation-storage.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
+import { NUMERICAL_PRECISION_THRESHOLD } from '@ghostfolio/common/config';
 import {
+  AssetProfileIdentifier,
   LineChartItem,
   PortfolioPerformance,
-  UniqueAsset,
   User
 } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
-import { DateRange } from '@ghostfolio/common/types';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -18,12 +20,13 @@ import { takeUntil } from 'rxjs/operators';
 @Component({
   selector: 'gf-home-overview',
   styleUrls: ['./home-overview.scss'],
-  templateUrl: './home-overview.html'
+  templateUrl: './home-overview.html',
+  standalone: false
 })
 export class HomeOverviewComponent implements OnDestroy, OnInit {
   public dateRangeOptions = ToggleComponent.DEFAULT_DATE_RANGE_OPTIONS;
   public deviceType: string;
-  public errors: UniqueAsset[];
+  public errors: AssetProfileIdentifier[];
   public hasError: boolean;
   public hasImpersonationId: boolean;
   public hasPermissionToCreateOrder: boolean;
@@ -32,7 +35,9 @@ export class HomeOverviewComponent implements OnDestroy, OnInit {
   public isAllTimeLow: boolean;
   public isLoadingPerformance = true;
   public performance: PortfolioPerformance;
+  public precision = 2;
   public showDetails = false;
+  public unit: string;
   public user: User;
 
   private unsubscribeSubject = new Subject<void>();
@@ -42,6 +47,7 @@ export class HomeOverviewComponent implements OnDestroy, OnInit {
     private dataService: DataService,
     private deviceService: DeviceDetectorService,
     private impersonationStorageService: ImpersonationStorageService,
+    private layoutService: LayoutService,
     private userService: UserService
   ) {
     this.userService.stateChanged
@@ -63,6 +69,12 @@ export class HomeOverviewComponent implements OnDestroy, OnInit {
   public ngOnInit() {
     this.deviceType = this.deviceService.getDeviceInfo().deviceType;
 
+    this.showDetails =
+      !this.user.settings.isRestrictedView &&
+      this.user.settings.viewMode !== 'ZEN';
+
+    this.unit = this.showDetails ? this.user.settings.baseCurrency : '%';
+
     this.impersonationStorageService
       .onChangeHasImpersonation()
       .pipe(takeUntil(this.unsubscribeSubject))
@@ -72,27 +84,10 @@ export class HomeOverviewComponent implements OnDestroy, OnInit {
         this.changeDetectorRef.markForCheck();
       });
 
-    this.showDetails =
-      !this.hasImpersonationId &&
-      !this.user.settings.isRestrictedView &&
-      this.user.settings.viewMode !== 'ZEN';
-  }
-
-  public onChangeDateRange(dateRange: DateRange) {
-    this.dataService
-      .putUserSetting({ dateRange })
+    this.layoutService.shouldReloadContent$
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe(() => {
-        this.userService.remove();
-
-        this.userService
-          .get()
-          .pipe(takeUntil(this.unsubscribeSubject))
-          .subscribe((user) => {
-            this.user = user;
-
-            this.changeDetectorRef.markForCheck();
-          });
+        this.update();
       });
   }
 
@@ -113,16 +108,25 @@ export class HomeOverviewComponent implements OnDestroy, OnInit {
       .subscribe(({ chart, errors, performance }) => {
         this.errors = errors;
         this.performance = performance;
-        this.isLoadingPerformance = false;
 
         this.historicalDataItems = chart.map(
-          ({ date, netPerformanceInPercentage }) => {
+          ({ date, netPerformanceInPercentageWithCurrencyEffect }) => {
             return {
               date,
-              value: netPerformanceInPercentage
+              value: netPerformanceInPercentageWithCurrencyEffect * 100
             };
           }
         );
+
+        if (
+          this.deviceType === 'mobile' &&
+          this.performance.currentValueInBaseCurrency >=
+            NUMERICAL_PRECISION_THRESHOLD
+        ) {
+          this.precision = 0;
+        }
+
+        this.isLoadingPerformance = false;
 
         this.changeDetectorRef.markForCheck();
       });

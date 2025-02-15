@@ -1,22 +1,23 @@
+import { ToggleOption } from '@ghostfolio/common/interfaces';
+
 import {
   ChangeDetectionStrategy,
   Component,
   EventEmitter,
   Input,
   OnChanges,
-  OnInit,
   Output
 } from '@angular/core';
 import { FormControl } from '@angular/forms';
-import { ToggleOption } from '@ghostfolio/common/types';
 
 @Component({
   selector: 'gf-toggle',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toggle.component.html',
-  styleUrls: ['./toggle.component.scss']
+  styleUrls: ['./toggle.component.scss'],
+  standalone: false
 })
-export class ToggleComponent implements OnChanges, OnInit {
+export class ToggleComponent implements OnChanges {
   public static DEFAULT_DATE_RANGE_OPTIONS: ToggleOption[] = [
     { label: $localize`Today`, value: '1d' },
     { label: $localize`YTD`, value: 'ytd' },
@@ -31,17 +32,13 @@ export class ToggleComponent implements OnChanges, OnInit {
 
   @Output() change = new EventEmitter<Pick<ToggleOption, 'value'>>();
 
-  public option = new FormControl<string>(undefined);
-
-  public constructor() {}
-
-  public ngOnInit() {}
+  public optionFormControl = new FormControl<string>(undefined);
 
   public ngOnChanges() {
-    this.option.setValue(this.defaultValue);
+    this.optionFormControl.setValue(this.defaultValue);
   }
 
   public onValueChange() {
-    this.change.emit({ value: this.option.value });
+    this.change.emit({ value: this.optionFormControl.value });
   }
 }

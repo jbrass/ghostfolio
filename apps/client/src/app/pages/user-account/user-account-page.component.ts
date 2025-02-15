@@ -1,6 +1,7 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
 import { TabConfiguration, User } from '@ghostfolio/common/interfaces';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject, takeUntil } from 'rxjs';
 
@@ -8,7 +9,8 @@ import { Subject, takeUntil } from 'rxjs';
   host: { class: 'page has-tabs' },
   selector: 'gf-user-account-page',
   styleUrls: ['./user-account-page.scss'],
-  templateUrl: './user-account-page.html'
+  templateUrl: './user-account-page.html',
+  standalone: false
 })
 export class UserAccountPageComponent implements OnDestroy, OnInit {
   public deviceType: string;
@@ -41,7 +43,7 @@ export class UserAccountPageComponent implements OnDestroy, OnInit {
               showCondition: !!this.user?.subscription
             },
             {
-              iconName: 'share-social-outline',
+              iconName: 'key-outline',
               label: $localize`Access`,
               path: ['/account', 'access']
             }

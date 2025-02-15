@@ -1,13 +1,15 @@
+import { GfValueComponent } from '@ghostfolio/ui/value';
+
 import { CommonModule } from '@angular/common';
-import { NgModule } from '@angular/core';
+import { CUSTOM_ELEMENTS_SCHEMA, NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { RouterModule } from '@angular/router';
-import { GfValueModule } from '@ghostfolio/ui/value';
 
 import { UserAccountSettingsComponent } from './user-account-settings.component';
 
@@ -17,14 +19,16 @@ import { UserAccountSettingsComponent } from './user-account-settings.component'
   imports: [
     CommonModule,
     FormsModule,
-    GfValueModule,
+    GfValueComponent,
     MatButtonModule,
     MatCardModule,
-    MatCheckboxModule,
     MatFormFieldModule,
+    MatInputModule,
     MatSelectModule,
+    MatSlideToggleModule,
     ReactiveFormsModule,
     RouterModule
-  ]
+  ],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
 export class GfUserAccountSettingsModule {}

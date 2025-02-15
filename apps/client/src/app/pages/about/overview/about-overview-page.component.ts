@@ -1,26 +1,25 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
-import { environment } from '@ghostfolio/client/../environments/environment';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
 import { User } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
 @Component({
   selector: 'gf-about-overview-page',
   styleUrls: ['./about-overview-page.scss'],
-  templateUrl: './about-overview-page.html'
+  templateUrl: './about-overview-page.html',
+  standalone: false
 })
 export class AboutOverviewPageComponent implements OnDestroy, OnInit {
-  public hasPermissionForBlog: boolean;
   public hasPermissionForStatistics: boolean;
   public hasPermissionForSubscription: boolean;
   public isLoggedIn: boolean;
-  public routerLinkFaq = ['/' + $localize`faq`];
-  public routerLinkFeatures = ['/' + $localize`features`];
+  public routerLinkFaq = ['/' + $localize`:snake-case:faq`];
+  public routerLinkFeatures = ['/' + $localize`:snake-case:features`];
   public user: User;
-  public version = environment.version;
 
   private unsubscribeSubject = new Subject<void>();
 
@@ -30,11 +29,6 @@ export class AboutOverviewPageComponent implements OnDestroy, OnInit {
     private userService: UserService
   ) {
     const { globalPermissions } = this.dataService.fetchInfo();
-
-    this.hasPermissionForBlog = hasPermission(
-      globalPermissions,
-      permissions.enableBlog
-    );
 
     this.hasPermissionForStatistics = hasPermission(
       globalPermissions,

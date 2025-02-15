@@ -11,6 +11,7 @@ export class AccountClusterRiskSingleAccount extends Rule<RuleSettings> {
     accounts: PortfolioDetails['accounts']
   ) {
     super(exchangeRateDataService, {
+      key: AccountClusterRiskSingleAccount.name,
       name: 'Single Account'
     });
 
@@ -33,9 +34,13 @@ export class AccountClusterRiskSingleAccount extends Rule<RuleSettings> {
     };
   }
 
-  public getSettings(aUserSettings: UserSettings): RuleSettings {
+  public getConfiguration() {
+    return undefined;
+  }
+
+  public getSettings({ xRayRules }: UserSettings): RuleSettings {
     return {
-      isActive: true
+      isActive: xRayRules?.[this.getKey()].isActive ?? true
     };
   }
 }

@@ -1,19 +1,33 @@
-import { LookupItem } from '@ghostfolio/api/app/symbol/interfaces/lookup-item.interface';
 import { CryptocurrencyService } from '@ghostfolio/api/services/cryptocurrency/cryptocurrency.service';
 import { YahooFinanceDataEnhancerService } from '@ghostfolio/api/services/data-provider/data-enhancer/yahoo-finance/yahoo-finance.service';
-import { DataProviderInterface } from '@ghostfolio/api/services/data-provider/interfaces/data-provider.interface';
+import {
+  DataProviderInterface,
+  GetDividendsParams,
+  GetHistoricalParams,
+  GetQuotesParams,
+  GetSearchParams
+} from '@ghostfolio/api/services/data-provider/interfaces/data-provider.interface';
 import {
   IDataProviderHistoricalResponse,
   IDataProviderResponse
 } from '@ghostfolio/api/services/interfaces/interfaces';
 import { DEFAULT_CURRENCY } from '@ghostfolio/common/config';
 import { DATE_FORMAT } from '@ghostfolio/common/helper';
-import { Granularity } from '@ghostfolio/common/types';
+import {
+  DataProviderInfo,
+  LookupItem,
+  LookupResponse
+} from '@ghostfolio/common/interfaces';
+
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, SymbolProfile } from '@prisma/client';
-import Big from 'big.js';
 import { addDays, format, isSameDay } from 'date-fns';
 import yahooFinance from 'yahoo-finance2';
+import { ChartResultArray } from 'yahoo-finance2/dist/esm/src/modules/chart';
+import {
+  HistoricalDividendsResult,
+  HistoricalHistoryResult
+} from 'yahoo-finance2/dist/esm/src/modules/historical';
 import { Quote } from 'yahoo-finance2/dist/esm/src/modules/quote';
 
 @Injectable()
@@ -23,23 +37,23 @@ export class YahooFinanceService implements DataProviderInterface {
     private readonly yahooFinanceDataEnhancerService: YahooFinanceDataEnhancerService
   ) {}
 
-  public canHandle(symbol: string) {
+  public canHandle() {
     return true;
   }
 
-  public async getAssetProfile(
-    aSymbol: string
-  ): Promise<Partial<SymbolProfile>> {
-    const { assetClass, assetSubClass, currency, name } =
-      await this.yahooFinanceDataEnhancerService.getAssetProfile(aSymbol);
+  public async getAssetProfile({
+    symbol
+  }: {
+    symbol: string;
+  }): Promise<Partial<SymbolProfile>> {
+    return this.yahooFinanceDataEnhancerService.getAssetProfile(symbol);
+  }
 
+  public getDataProviderInfo(): DataProviderInfo {
     return {
-      assetClass,
-      assetSubClass,
-      currency,
-      name,
-      dataSource: this.getName(),
-      symbol: aSymbol
+      isPremium: false,
+      name: 'Yahoo Finance',
+      url: 'https://finance.yahoo.com'
     };
   }
 
@@ -48,39 +62,32 @@ export class YahooFinanceService implements DataProviderInterface {
     granularity = 'day',
     symbol,
     to
-  }: {
-    from: Date;
-    granularity: Granularity;
-    symbol: string;
-    to: Date;
-  }) {
+  }: GetDividendsParams) {
     if (isSameDay(from, to)) {
       to = addDays(to, 1);
     }
 
     try {
-      const historicalResult = await yahooFinance.historical(
-        this.yahooFinanceDataEnhancerService.convertToYahooFinanceSymbol(
-          symbol
-        ),
-        {
-          events: 'dividends',
-          interval: granularity === 'month' ? '1mo' : '1d',
-          period1: format(from, DATE_FORMAT),
-          period2: format(to, DATE_FORMAT)
-        }
+      const historicalResult = this.convertToDividendResult(
+        await yahooFinance.chart(
+          this.yahooFinanceDataEnhancerService.convertToYahooFinanceSymbol(
+            symbol
+          ),
+          {
+            events: 'dividends',
+            interval: granularity === 'month' ? '1mo' : '1d',
+            period1: format(from, DATE_FORMAT),
+            period2: format(to, DATE_FORMAT)
+          }
+        )
       );
-
       const response: {
         [date: string]: IDataProviderHistoricalResponse;
       } = {};
 
       for (const historicalItem of historicalResult) {
         response[format(historicalItem.date, DATE_FORMAT)] = {
-          marketPrice: this.getConvertedValue({
-            symbol,
-            value: historicalItem.dividends
-          })
+          marketPrice: historicalItem.dividends
         };
       }
 
@@ -98,12 +105,11 @@ export class YahooFinanceService implements DataProviderInterface {
     }
   }
 
-  public async getHistorical(
-    aSymbol: string,
-    aGranularity: Granularity = 'day',
-    from: Date,
-    to: Date
-  ): Promise<{
+  public async getHistorical({
+    from,
+    symbol,
+    to
+  }: GetHistoricalParams): Promise<{
     [symbol: string]: { [date: string]: IDataProviderHistoricalResponse };
   }> {
     if (isSameDay(from, to)) {
@@ -111,36 +117,35 @@ export class YahooFinanceService implements DataProviderInterface {
     }
 
     try {
-      const historicalResult = await yahooFinance.historical(
-        this.yahooFinanceDataEnhancerService.convertToYahooFinanceSymbol(
-          aSymbol
-        ),
-        {
-          interval: '1d',
-          period1: format(from, DATE_FORMAT),
-          period2: format(to, DATE_FORMAT)
-        }
+      const historicalResult = this.convertToHistoricalResult(
+        await yahooFinance.chart(
+          this.yahooFinanceDataEnhancerService.convertToYahooFinanceSymbol(
+            symbol
+          ),
+          {
+            interval: '1d',
+            period1: format(from, DATE_FORMAT),
+            period2: format(to, DATE_FORMAT)
+          }
+        )
       );
 
       const response: {
         [symbol: string]: { [date: string]: IDataProviderHistoricalResponse };
       } = {};
 
-      response[aSymbol] = {};
+      response[symbol] = {};
 
       for (const historicalItem of historicalResult) {
-        response[aSymbol][format(historicalItem.date, DATE_FORMAT)] = {
-          marketPrice: this.getConvertedValue({
-            symbol: aSymbol,
-            value: historicalItem.close
-          })
+        response[symbol][format(historicalItem.date, DATE_FORMAT)] = {
+          marketPrice: historicalItem.close
         };
       }
 
       return response;
     } catch (error) {
       throw new Error(
-        `Could not get historical market data for ${aSymbol} (${this.getName()}) from ${format(
+        `Could not get historical market data for ${symbol} (${this.getName()}) from ${format(
           from,
           DATE_FORMAT
         )} to ${format(to, DATE_FORMAT)}: [${error.name}] ${error.message}`
@@ -156,20 +161,20 @@ export class YahooFinanceService implements DataProviderInterface {
     return DataSource.YAHOO;
   }
 
-  public async getQuotes(
-    aSymbols: string[]
-  ): Promise<{ [symbol: string]: IDataProviderResponse }> {
-    if (aSymbols.length <= 0) {
-      return {};
+  public async getQuotes({
+    symbols
+  }: GetQuotesParams): Promise<{ [symbol: string]: IDataProviderResponse }> {
+    const response: { [symbol: string]: IDataProviderResponse } = {};
+
+    if (symbols.length <= 0) {
+      return response;
     }
 
-    const yahooFinanceSymbols = aSymbols.map((symbol) =>
+    const yahooFinanceSymbols = symbols.map((symbol) =>
       this.yahooFinanceDataEnhancerService.convertToYahooFinanceSymbol(symbol)
     );
 
     try {
-      const response: { [symbol: string]: IDataProviderResponse } = {};
-
       let quotes: Pick<
         Quote,
         'currency' | 'marketState' | 'regularMarketPrice' | 'symbol'
@@ -205,57 +210,6 @@ export class YahooFinanceService implements DataProviderInterface {
               : 'closed',
           marketPrice: quote.regularMarketPrice || 0
         };
-
-        if (
-          symbol === `${DEFAULT_CURRENCY}GBP` &&
-          yahooFinanceSymbols.includes(`${DEFAULT_CURRENCY}GBp=X`)
-        ) {
-          // Convert GPB to GBp (pence)
-          response[`${DEFAULT_CURRENCY}GBp`] = {
-            ...response[symbol],
-            currency: 'GBp',
-            marketPrice: this.getConvertedValue({
-              symbol: `${DEFAULT_CURRENCY}GBp`,
-              value: response[symbol].marketPrice
-            })
-          };
-        } else if (
-          symbol === `${DEFAULT_CURRENCY}ILS` &&
-          yahooFinanceSymbols.includes(`${DEFAULT_CURRENCY}ILA=X`)
-        ) {
-          // Convert ILS to ILA
-          response[`${DEFAULT_CURRENCY}ILA`] = {
-            ...response[symbol],
-            currency: 'ILA',
-            marketPrice: this.getConvertedValue({
-              symbol: `${DEFAULT_CURRENCY}ILA`,
-              value: response[symbol].marketPrice
-            })
-          };
-        } else if (
-          symbol === `${DEFAULT_CURRENCY}ZAR` &&
-          yahooFinanceSymbols.includes(`${DEFAULT_CURRENCY}ZAc=X`)
-        ) {
-          // Convert ZAR to ZAc (cents)
-          response[`${DEFAULT_CURRENCY}ZAc`] = {
-            ...response[symbol],
-            currency: 'ZAc',
-            marketPrice: this.getConvertedValue({
-              symbol: `${DEFAULT_CURRENCY}ZAc`,
-              value: response[symbol].marketPrice
-            })
-          };
-        }
-      }
-
-      if (yahooFinanceSymbols.includes(`${DEFAULT_CURRENCY}USX=X`)) {
-        // Convert USD to USX (cent)
-        response[`${DEFAULT_CURRENCY}USX`] = {
-          currency: 'USX',
-          dataSource: this.getName(),
-          marketPrice: new Big(1).mul(100).toNumber(),
-          marketState: 'open'
-        };
       }
 
       return response;
@@ -273,10 +227,7 @@ export class YahooFinanceService implements DataProviderInterface {
   public async search({
     includeIndices = false,
     query
-  }: {
-    includeIndices?: boolean;
-    query: string;
-  }): Promise<{ items: LookupItem[] }> {
+  }: GetSearchParams): Promise<LookupResponse> {
     const items: LookupItem[] = [];
 
     try {
@@ -345,6 +296,7 @@ export class YahooFinanceService implements DataProviderInterface {
           assetSubClass,
           symbol,
           currency: marketDataItem.currency,
+          dataProviderInfo: this.getDataProviderInfo(),
           dataSource: this.getName(),
           name: this.yahooFinanceDataEnhancerService.formatName({
             longName: quote.longname,
@@ -361,25 +313,18 @@ export class YahooFinanceService implements DataProviderInterface {
     return { items };
   }
 
-  private getConvertedValue({
-    symbol,
-    value
-  }: {
-    symbol: string;
-    value: number;
-  }) {
-    if (symbol === `${DEFAULT_CURRENCY}GBp`) {
-      // Convert GPB to GBp (pence)
-      return new Big(value).mul(100).toNumber();
-    } else if (symbol === `${DEFAULT_CURRENCY}ILA`) {
-      // Convert ILS to ILA
-      return new Big(value).mul(100).toNumber();
-    } else if (symbol === `${DEFAULT_CURRENCY}ZAc`) {
-      // Convert ZAR to ZAc (cents)
-      return new Big(value).mul(100).toNumber();
-    }
+  private convertToDividendResult(
+    result: ChartResultArray
+  ): HistoricalDividendsResult {
+    return result.events.dividends.map(({ amount: dividends, date }) => {
+      return { date, dividends };
+    });
+  }
 
-    return value;
+  private convertToHistoricalResult(
+    result: ChartResultArray
+  ): HistoricalHistoryResult {
+    return result.quotes;
   }
 
   private async getQuotesWithQuoteSummary(aYahooFinanceSymbols: string[]) {

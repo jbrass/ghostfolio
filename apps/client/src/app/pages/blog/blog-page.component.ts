@@ -1,13 +1,15 @@
-import { Component, OnDestroy } from '@angular/core';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+
+import { Component, OnDestroy } from '@angular/core';
 import { Subject } from 'rxjs';
 
 @Component({
   host: { class: 'page' },
   selector: 'gf-blog-page',
   styleUrls: ['./blog-page.scss'],
-  templateUrl: './blog-page.html'
+  templateUrl: './blog-page.html',
+  standalone: false
 })
 export class BlogPageComponent implements OnDestroy {
   public hasPermissionForSubscription: boolean;

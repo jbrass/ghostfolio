@@ -1,21 +1,19 @@
-import { BenchmarkService } from '@ghostfolio/api/app/benchmark/benchmark.service';
 import { PlatformService } from '@ghostfolio/api/app/platform/platform.service';
 import { RedisCacheService } from '@ghostfolio/api/app/redis-cache/redis-cache.service';
 import { UserService } from '@ghostfolio/api/app/user/user.service';
+import { BenchmarkService } from '@ghostfolio/api/services/benchmark/benchmark.service';
 import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
 import { ExchangeRateDataService } from '@ghostfolio/api/services/exchange-rate-data/exchange-rate-data.service';
 import { PropertyService } from '@ghostfolio/api/services/property/property.service';
-import { TagService } from '@ghostfolio/api/services/tag/tag.service';
 import {
   DEFAULT_CURRENCY,
-  DEFAULT_REQUEST_TIMEOUT,
+  HEADER_KEY_TOKEN,
   PROPERTY_BETTER_UPTIME_MONITOR_ID,
   PROPERTY_COUNTRIES_OF_SUBSCRIBERS,
   PROPERTY_DEMO_USER_ID,
   PROPERTY_IS_READ_ONLY_MODE,
   PROPERTY_SLACK_COMMUNITY_USERS,
   PROPERTY_STRIPE_CONFIG,
-  PROPERTY_SYSTEM_MESSAGE,
   ghostfolioFearAndGreedIndexDataSource
 } from '@ghostfolio/common/config';
 import {
@@ -26,15 +24,15 @@ import {
 import {
   InfoItem,
   Statistics,
-  Subscription
+  SubscriptionOffer
 } from '@ghostfolio/common/interfaces';
 import { permissions } from '@ghostfolio/common/permissions';
-import { SubscriptionOffer } from '@ghostfolio/common/types';
+import { SubscriptionOfferKey } from '@ghostfolio/common/types';
+
 import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as cheerio from 'cheerio';
 import { format, subDays } from 'date-fns';
-import got from 'got';
 
 @Injectable()
 export class InfoService {
@@ -48,27 +46,14 @@ export class InfoService {
     private readonly platformService: PlatformService,
     private readonly propertyService: PropertyService,
     private readonly redisCacheService: RedisCacheService,
-    private readonly tagService: TagService,
     private readonly userService: UserService
   ) {}
 
   public async get(): Promise<InfoItem> {
     const info: Partial<InfoItem> = {};
     let isReadOnlyMode: boolean;
-    const platforms = (
-      await this.platformService.getPlatforms({
-        orderBy: { name: 'asc' }
-      })
-    ).map(({ id, name }) => {
-      return { id, name };
-    });
-    let systemMessage: string;
 
     const globalPermissions: string[] = [];
-
-    if (this.configurationService.get('ENABLE_FEATURE_BLOG')) {
-      globalPermissions.push(permissions.enableBlog);
-    }
 
     if (this.configurationService.get('ENABLE_FEATURE_FEAR_AND_GREED_INDEX')) {
       if (this.configurationService.get('ENABLE_FEATURE_SUBSCRIPTION')) {
@@ -108,27 +93,29 @@ export class InfoService {
 
     if (this.configurationService.get('ENABLE_FEATURE_SYSTEM_MESSAGE')) {
       globalPermissions.push(permissions.enableSystemMessage);
-
-      systemMessage = (await this.propertyService.getByKey(
-        PROPERTY_SYSTEM_MESSAGE
-      )) as string;
     }
 
-    const isUserSignupEnabled =
-      await this.propertyService.isUserSignupEnabled();
+    const [
+      benchmarks,
+      demoAuthToken,
+      isUserSignupEnabled,
+      platforms,
+      statistics,
+      subscriptionOffers
+    ] = await Promise.all([
+      this.benchmarkService.getBenchmarkAssetProfiles(),
+      this.getDemoAuthToken(),
+      this.propertyService.isUserSignupEnabled(),
+      this.platformService.getPlatforms({
+        orderBy: { name: 'asc' }
+      }),
+      this.getStatistics(),
+      this.getSubscriptionOffers()
+    ]);
 
     if (isUserSignupEnabled) {
       globalPermissions.push(permissions.createUserAccount);
     }
-
-    const [benchmarks, demoAuthToken, statistics, subscriptions, tags] =
-      await Promise.all([
-        this.benchmarkService.getBenchmarkAssetProfiles(),
-        this.getDemoAuthToken(),
-        this.getStatistics(),
-        this.getSubscriptions(),
-        this.tagService.get()
-      ]);
 
     return {
       ...info,
@@ -138,9 +125,7 @@ export class InfoService {
       isReadOnlyMode,
       platforms,
       statistics,
-      subscriptions,
-      systemMessage,
-      tags,
+      subscriptionOffers,
       baseCurrency: DEFAULT_CURRENCY,
       currencies: this.exchangeRateDataService.getCurrencies()
     };
@@ -157,7 +142,7 @@ export class InfoService {
           },
           {
             Analytics: {
-              updatedAt: {
+              lastRequestAt: {
                 gt: subDays(new Date(), aDays)
               }
             }
@@ -169,20 +154,15 @@ export class InfoService {
 
   private async countDockerHubPulls(): Promise<number> {
     try {
-      const abortController = new AbortController();
-
-      setTimeout(() => {
-        abortController.abort();
-      }, DEFAULT_REQUEST_TIMEOUT);
-
-      const { pull_count } = await got(
-        `https://hub.docker.com/v2/repositories/ghostfolio/ghostfolio`,
+      const { pull_count } = (await fetch(
+        'https://hub.docker.com/v2/repositories/ghostfolio/ghostfolio',
         {
           headers: { 'User-Agent': 'request' },
-          // @ts-ignore
-          signal: abortController.signal
+          signal: AbortSignal.timeout(
+            this.configurationService.get('REQUEST_TIMEOUT')
+          )
         }
-      ).json<any>();
+      ).then((res) => res.json())) as { pull_count: number };
 
       return pull_count;
     } catch (error) {
@@ -194,24 +174,19 @@ export class InfoService {
 
   private async countGitHubContributors(): Promise<number> {
     try {
-      const abortController = new AbortController();
-
-      setTimeout(() => {
-        abortController.abort();
-      }, DEFAULT_REQUEST_TIMEOUT);
-
-      const { body } = await got('https://github.com/ghostfolio/ghostfolio', {
-        // @ts-ignore
-        signal: abortController.signal
-      });
+      const body = await fetch('https://github.com/ghostfolio/ghostfolio', {
+        signal: AbortSignal.timeout(
+          this.configurationService.get('REQUEST_TIMEOUT')
+        )
+      }).then((res) => res.text());
 
       const $ = cheerio.load(body);
 
-      return extractNumberFromString(
-        $(
-          `a[href="/ghostfolio/ghostfolio/graphs/contributors"] .Counter`
+      return extractNumberFromString({
+        value: $(
+          'a[href="/ghostfolio/ghostfolio/graphs/contributors"] .Counter'
         ).text()
-      );
+      });
     } catch (error) {
       Logger.error(error, 'InfoService - GitHub');
 
@@ -221,20 +196,15 @@ export class InfoService {
 
   private async countGitHubStargazers(): Promise<number> {
     try {
-      const abortController = new AbortController();
-
-      setTimeout(() => {
-        abortController.abort();
-      }, DEFAULT_REQUEST_TIMEOUT);
-
-      const { stargazers_count } = await got(
-        `https://api.github.com/repos/ghostfolio/ghostfolio`,
+      const { stargazers_count } = (await fetch(
+        'https://api.github.com/repos/ghostfolio/ghostfolio',
         {
           headers: { 'User-Agent': 'request' },
-          // @ts-ignore
-          signal: abortController.signal
+          signal: AbortSignal.timeout(
+            this.configurationService.get('REQUEST_TIMEOUT')
+          )
         }
-      ).json<any>();
+      ).then((res) => res.json())) as { stargazers_count: number };
 
       return stargazers_count;
     } catch (error) {
@@ -329,8 +299,8 @@ export class InfoService {
     return statistics;
   }
 
-  private async getSubscriptions(): Promise<{
-    [offer in SubscriptionOffer]: Subscription;
+  private async getSubscriptionOffers(): Promise<{
+    [offer in SubscriptionOfferKey]: SubscriptionOffer;
   }> {
     if (!this.configurationService.get('ENABLE_FEATURE_SUBSCRIPTION')) {
       return undefined;
@@ -349,27 +319,22 @@ export class InfoService {
           PROPERTY_BETTER_UPTIME_MONITOR_ID
         )) as string;
 
-        const abortController = new AbortController();
-
-        setTimeout(() => {
-          abortController.abort();
-        }, DEFAULT_REQUEST_TIMEOUT);
-
-        const { data } = await got(
+        const { data } = await fetch(
           `https://uptime.betterstack.com/api/v2/monitors/${monitorId}/sla?from=${format(
             subDays(new Date(), 90),
             DATE_FORMAT
           )}&to${format(new Date(), DATE_FORMAT)}`,
           {
             headers: {
-              Authorization: `Bearer ${this.configurationService.get(
-                'BETTER_UPTIME_API_KEY'
+              [HEADER_KEY_TOKEN]: `Bearer ${this.configurationService.get(
+                'API_KEY_BETTER_UPTIME'
               )}`
             },
-            // @ts-ignore
-            signal: abortController.signal
+            signal: AbortSignal.timeout(
+              this.configurationService.get('REQUEST_TIMEOUT')
+            )
           }
-        ).json<any>();
+        ).then((res) => res.json());
 
         return data.attributes.availability / 100;
       } catch (error) {

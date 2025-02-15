@@ -1,17 +1,11 @@
-@import 'apps/client/src/styles/ghostfolio-style';
-
 :host {
   display: block;
 
-  .holdings {
-    overflow-x: auto;
-
-    .mat-mdc-table {
-      th {
-        ::ng-deep {
-          .mat-sort-header-container {
-            justify-content: inherit;
-          }
+  .gf-table {
+    th {
+      ::ng-deep {
+        .mat-sort-header-container {
+          justify-content: inherit;
         }
       }
     }

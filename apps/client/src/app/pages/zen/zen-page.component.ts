@@ -1,6 +1,7 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
 import { TabConfiguration, User } from '@ghostfolio/common/interfaces';
+
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -9,7 +10,8 @@ import { takeUntil } from 'rxjs/operators';
   host: { class: 'page has-tabs' },
   selector: 'gf-zen-page',
   styleUrls: ['./zen-page.scss'],
-  templateUrl: './zen-page.html'
+  templateUrl: './zen-page.html',
+  standalone: false
 })
 export class ZenPageComponent implements OnDestroy, OnInit {
   public deviceType: string;
