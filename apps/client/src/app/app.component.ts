@@ -2,6 +2,7 @@ import { GfHoldingDetailDialogComponent } from '@ghostfolio/client/components/ho
 import { HoldingDetailDialogParams } from '@ghostfolio/client/components/holding-detail-dialog/interfaces/interfaces';
 import { getCssVariable } from '@ghostfolio/common/helper';
 import { InfoItem, User } from '@ghostfolio/common/interfaces';
+import { paths } from '@ghostfolio/common/paths';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
 import { ColorScheme } from '@ghostfolio/common/types';
 
@@ -62,25 +63,23 @@ export class AppComponent implements OnDestroy, OnInit {
   public hasTabs = false;
   public info: InfoItem;
   public pageTitle: string;
-  public routerLinkAbout = ['/' + $localize`:snake-case:about`];
-  public routerLinkAboutChangelog = [
-    '/' + $localize`:snake-case:about`,
-    'changelog'
-  ];
-  public routerLinkAboutLicense = [
-    '/' + $localize`:snake-case:about`,
-    $localize`:snake-case:license`
-  ];
+  public routerLinkAbout = ['/' + paths.about];
+  public routerLinkAboutChangelog = ['/' + paths.about, paths.changelog];
+  public routerLinkAboutLicense = ['/' + paths.about, paths.license];
   public routerLinkAboutPrivacyPolicy = [
-    '/' + $localize`:snake-case:about`,
-    $localize`:snake-case:privacy-policy`
+    '/' + paths.about,
+    paths.privacyPolicy
   ];
-  public routerLinkFaq = ['/' + $localize`:snake-case:faq`];
-  public routerLinkFeatures = ['/' + $localize`:snake-case:features`];
-  public routerLinkMarkets = ['/' + $localize`:snake-case:markets`];
-  public routerLinkPricing = ['/' + $localize`:snake-case:pricing`];
-  public routerLinkRegister = ['/' + $localize`:snake-case:register`];
-  public routerLinkResources = ['/' + $localize`:snake-case:resources`];
+  public routerLinkAboutTermsOfService = [
+    '/' + paths.about,
+    paths.termsOfService
+  ];
+  public routerLinkFaq = ['/' + paths.faq];
+  public routerLinkFeatures = ['/' + paths.features];
+  public routerLinkMarkets = ['/' + paths.markets];
+  public routerLinkPricing = ['/' + paths.pricing];
+  public routerLinkRegister = ['/' + paths.register];
+  public routerLinkResources = ['/' + paths.resources];
   public showFooter = false;
   public user: User;
 
@@ -139,8 +138,8 @@ export class AppComponent implements OnDestroy, OnInit {
     );
 
     this.hasPromotion =
-      !!this.info?.subscriptionOffers?.default?.coupon ||
-      !!this.info?.subscriptionOffers?.default?.durationExtension;
+      !!this.info?.subscriptionOffer?.coupon ||
+      !!this.info?.subscriptionOffer?.durationExtension;
 
     this.impersonationStorageService
       .onChangeHasImpersonation()
@@ -238,12 +237,8 @@ export class AppComponent implements OnDestroy, OnInit {
           this.canCreateAccount || !!this.user?.systemMessage;
 
         this.hasPromotion =
-          !!this.info?.subscriptionOffers?.[
-            this.user?.subscription?.offer ?? 'default'
-          ]?.coupon ||
-          !!this.info?.subscriptionOffers?.[
-            this.user?.subscription?.offer ?? 'default'
-          ]?.durationExtension;
+          !!this.user?.subscription?.offer?.coupon ||
+          !!this.user?.subscription?.offer?.durationExtension;
 
         this.initializeTheme(this.user?.settings.colorScheme);
 

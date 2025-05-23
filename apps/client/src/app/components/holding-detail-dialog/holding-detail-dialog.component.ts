@@ -13,6 +13,7 @@ import {
   LineChartItem,
   User
 } from '@ghostfolio/common/interfaces';
+import { paths } from '@ghostfolio/common/paths';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
 import { GfActivitiesTableComponent } from '@ghostfolio/ui/activities-table';
 import { GfDataProviderCreditsComponent } from '@ghostfolio/ui/data-provider-credits';
@@ -105,8 +106,8 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   public investmentPrecision = 2;
   public marketDataItems: MarketData[] = [];
   public marketPrice: number;
-  public maxPrice: number;
-  public minPrice: number;
+  public marketPriceMax: number;
+  public marketPriceMin: number;
   public netPerformance: number;
   public netPerformancePrecision = 2;
   public netPerformancePercent: number;
@@ -175,6 +176,9 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
                   ]
                 });
               }),
+              switchMap(() => {
+                return this.userService.get(true);
+              }),
               takeUntil(this.unsubscribeSubject)
             )
             .subscribe();
@@ -231,8 +235,8 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
           historicalData,
           investment,
           marketPrice,
-          maxPrice,
-          minPrice,
+          marketPriceMax,
+          marketPriceMin,
           netPerformance,
           netPerformancePercent,
           netPerformancePercentWithCurrencyEffect,
@@ -294,8 +298,8 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
           }
 
           this.marketPrice = marketPrice;
-          this.maxPrice = maxPrice;
-          this.minPrice = minPrice;
+          this.marketPriceMax = marketPriceMax;
+          this.marketPriceMin = marketPriceMin;
           this.netPerformance = netPerformance;
 
           if (
@@ -465,7 +469,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   }
 
   public onCloneActivity(aActivity: Activity) {
-    this.router.navigate(['/portfolio', 'activities'], {
+    this.router.navigate(['/' + paths.portfolio, paths.activities], {
       queryParams: { activityId: aActivity.id, createDialog: true }
     });
 
@@ -507,7 +511,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   }
 
   public onUpdateActivity(aActivity: Activity) {
-    this.router.navigate(['/portfolio', 'activities'], {
+    this.router.navigate(['/' + paths.portfolio, paths.activities], {
       queryParams: { activityId: aActivity.id, editDialog: true }
     });
 

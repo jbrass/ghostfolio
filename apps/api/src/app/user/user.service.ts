@@ -41,6 +41,7 @@ import {
   permissions
 } from '@ghostfolio/common/permissions';
 import { UserWithSettings } from '@ghostfolio/common/types';
+import { PerformanceCalculationType } from '@ghostfolio/common/types/performance-calculation-type.type';
 
 import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -67,11 +68,31 @@ export class UserService {
     return this.prismaService.user.count(args);
   }
 
-  public createAccessToken(password: string, salt: string): string {
+  public createAccessToken({
+    password,
+    salt
+  }: {
+    password: string;
+    salt: string;
+  }): string {
     const hash = createHmac('sha512', salt);
     hash.update(password);
 
     return hash.digest('hex');
+  }
+
+  public generateAccessToken({ userId }: { userId: string }) {
+    const accessToken = this.createAccessToken({
+      password: userId,
+      salt: getRandomString(10)
+    });
+
+    const hashedAccessToken = this.createAccessToken({
+      password: accessToken,
+      salt: this.configurationService.get('ACCESS_TOKEN_SALT')
+    });
+
+    return { accessToken, hashedAccessToken };
   }
 
   public async getUser(
@@ -86,6 +107,9 @@ export class UserService {
         orderBy: { alias: 'asc' },
         where: { GranteeUser: { id } }
       }),
+      this.prismaService.order.count({
+        where: { userId: id }
+      }),
       this.prismaService.order.findFirst({
         orderBy: {
           date: 'asc'
@@ -96,8 +120,9 @@ export class UserService {
     ]);
 
     const access = userData[0];
-    const firstActivity = userData[1];
-    let tags = userData[2];
+    const activitiesCount = userData[1];
+    const firstActivity = userData[2];
+    let tags = userData[3];
 
     let systemMessage: SystemMessage;
 
@@ -117,6 +142,7 @@ export class UserService {
     }
 
     return {
+      activitiesCount,
       id,
       permissions,
       subscription,
@@ -164,7 +190,7 @@ export class UserService {
       provider,
       role,
       Settings,
-      Subscription,
+      subscriptions,
       thirdPartyId,
       updatedAt
     } = await this.prismaService.user.findUnique({
@@ -175,7 +201,7 @@ export class UserService {
         },
         Analytics: true,
         Settings: true,
-        Subscription: true
+        subscriptions: true
       },
       where: userWhereUniqueInput
     });
@@ -220,6 +246,12 @@ export class UserService {
       (user.Settings.settings as UserSettings).viewMode === 'ZEN'
         ? 'max'
         : ((user.Settings.settings as UserSettings)?.dateRange ?? 'max');
+
+    // Set default value for performance calculation type
+    if (!(user.Settings.settings as UserSettings)?.performanceCalculationType) {
+      (user.Settings.settings as UserSettings).performanceCalculationType =
+        PerformanceCalculationType.ROAI;
+    }
 
     // Set default value for view mode
     if (!(user.Settings.settings as UserSettings).viewMode) {
@@ -314,9 +346,9 @@ export class UserService {
     }
 
     if (this.configurationService.get('ENABLE_FEATURE_SUBSCRIPTION')) {
-      user.subscription = this.subscriptionService.getSubscription({
-        createdAt: user.createdAt,
-        subscriptions: Subscription
+      user.subscription = await this.subscriptionService.getSubscription({
+        subscriptions,
+        createdAt: user.createdAt
       });
 
       if (user.subscription?.type === 'Basic') {
@@ -324,18 +356,20 @@ export class UserService {
           new Date(),
           user.createdAt
         );
-        let frequency = 10;
+        let frequency = 7;
 
-        if (daysSinceRegistration > 365) {
+        if (daysSinceRegistration > 720) {
+          frequency = 1;
+        } else if (daysSinceRegistration > 360) {
           frequency = 2;
         } else if (daysSinceRegistration > 180) {
           frequency = 3;
         } else if (daysSinceRegistration > 60) {
           frequency = 4;
         } else if (daysSinceRegistration > 30) {
-          frequency = 6;
+          frequency = 5;
         } else if (daysSinceRegistration > 15) {
-          frequency = 8;
+          frequency = 6;
         }
 
         if (Analytics?.activityCount % frequency === 1) {
@@ -348,6 +382,7 @@ export class UserService {
           permissions.createAccess,
           permissions.createMarketDataOfOwnAssetProfile,
           permissions.createOwnTag,
+          permissions.createWatchlistItem,
           permissions.readAiPrompt,
           permissions.readMarketDataOfOwnAssetProfile,
           permissions.updateMarketDataOfOwnAssetProfile
@@ -359,14 +394,22 @@ export class UserService {
         // Reset holdings view mode
         user.Settings.settings.holdingsViewMode = undefined;
       } else if (user.subscription?.type === 'Premium') {
-        currentPermissions.push(permissions.createApiKey);
-        currentPermissions.push(permissions.enableDataProviderGhostfolio);
-        currentPermissions.push(permissions.reportDataGlitch);
+        if (!hasRole(user, Role.DEMO)) {
+          currentPermissions.push(permissions.createApiKey);
+          currentPermissions.push(permissions.enableDataProviderGhostfolio);
+          currentPermissions.push(permissions.reportDataGlitch);
+        }
 
         currentPermissions = without(
           currentPermissions,
           permissions.deleteOwnUser
         );
+
+        // Reset offer
+        user.subscription.offer.coupon = undefined;
+        user.subscription.offer.couponId = undefined;
+        user.subscription.offer.durationExtension = undefined;
+        user.subscription.offer.label = undefined;
       }
     }
 
@@ -428,7 +471,7 @@ export class UserService {
       data.provider = 'ANONYMOUS';
     }
 
-    let user = await this.prismaService.user.create({
+    const user = await this.prismaService.user.create({
       data: {
         ...data,
         Account: {
@@ -459,14 +502,11 @@ export class UserService {
     }
 
     if (data.provider === 'ANONYMOUS') {
-      const accessToken = this.createAccessToken(user.id, getRandomString(10));
+      const { accessToken, hashedAccessToken } = this.generateAccessToken({
+        userId: user.id
+      });
 
-      const hashedAccessToken = this.createAccessToken(
-        accessToken,
-        this.configurationService.get('ACCESS_TOKEN_SALT')
-      );
-
-      user = await this.prismaService.user.update({
+      await this.prismaService.user.update({
         data: { accessToken: hashedAccessToken },
         where: { id: user.id }
       });

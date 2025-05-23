@@ -2,6 +2,7 @@ import { ConfigurationService } from '@ghostfolio/api/services/configuration/con
 import { CryptocurrencyService } from '@ghostfolio/api/services/cryptocurrency/cryptocurrency.service';
 import {
   DataProviderInterface,
+  GetAssetProfileParams,
   GetDividendsParams,
   GetHistoricalParams,
   GetQuotesParams,
@@ -11,7 +12,11 @@ import {
   IDataProviderHistoricalResponse,
   IDataProviderResponse
 } from '@ghostfolio/api/services/interfaces/interfaces';
-import { DATE_FORMAT, parseDate } from '@ghostfolio/common/helper';
+import {
+  DEFAULT_CURRENCY,
+  REPLACE_NAME_PARTS
+} from '@ghostfolio/common/config';
+import { DATE_FORMAT, isCurrency, parseDate } from '@ghostfolio/common/helper';
 import {
   DataProviderInfo,
   LookupItem,
@@ -56,37 +61,42 @@ export class FinancialModelingPrepService implements DataProviderInterface {
   }
 
   public async getAssetProfile({
+    requestTimeout = this.configurationService.get('REQUEST_TIMEOUT'),
     symbol
-  }: {
-    symbol: string;
-  }): Promise<Partial<SymbolProfile>> {
+  }: GetAssetProfileParams): Promise<Partial<SymbolProfile>> {
     const response: Partial<SymbolProfile> = {
       symbol,
       dataSource: this.getName()
     };
 
     try {
-      if (this.cryptocurrencyService.isCryptocurrency(symbol)) {
+      if (
+        isCurrency(symbol.substring(0, symbol.length - DEFAULT_CURRENCY.length))
+      ) {
+        response.assetClass = AssetClass.LIQUIDITY;
+        response.assetSubClass = AssetSubClass.CASH;
+        response.currency = symbol.substring(
+          symbol.length - DEFAULT_CURRENCY.length
+        );
+      } else if (this.cryptocurrencyService.isCryptocurrency(symbol)) {
         const [quote] = await fetch(
           `${this.URL}/quote/${symbol}?apikey=${this.apiKey}`,
           {
-            signal: AbortSignal.timeout(
-              this.configurationService.get('REQUEST_TIMEOUT')
-            )
+            signal: AbortSignal.timeout(requestTimeout)
           }
         ).then((res) => res.json());
 
         response.assetClass = AssetClass.LIQUIDITY;
         response.assetSubClass = AssetSubClass.CRYPTOCURRENCY;
-        response.currency = symbol.substring(symbol.length - 3);
+        response.currency = symbol.substring(
+          symbol.length - DEFAULT_CURRENCY.length
+        );
         response.name = quote.name;
       } else {
         const [assetProfile] = await fetch(
           `${this.URL}/profile/${symbol}?apikey=${this.apiKey}`,
           {
-            signal: AbortSignal.timeout(
-              this.configurationService.get('REQUEST_TIMEOUT')
-            )
+            signal: AbortSignal.timeout(requestTimeout)
           }
         ).then((res) => res.json());
 
@@ -100,9 +110,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
           const etfCountryWeightings = await fetch(
             `${this.URL}/etf-country-weightings/${symbol}?apikey=${this.apiKey}`,
             {
-              signal: AbortSignal.timeout(
-                this.configurationService.get('REQUEST_TIMEOUT')
-              )
+              signal: AbortSignal.timeout(requestTimeout)
             }
           ).then((res) => res.json());
 
@@ -127,9 +135,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
           const [etfInformation] = await fetch(
             `${this.getUrl({ version: 4 })}/etf-info?symbol=${symbol}&apikey=${this.apiKey}`,
             {
-              signal: AbortSignal.timeout(
-                this.configurationService.get('REQUEST_TIMEOUT')
-              )
+              signal: AbortSignal.timeout(requestTimeout)
             }
           ).then((res) => res.json());
 
@@ -140,9 +146,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
           const [portfolioDate] = await fetch(
             `${this.getUrl({ version: 4 })}/etf-holdings/portfolio-date?symbol=${symbol}&apikey=${this.apiKey}`,
             {
-              signal: AbortSignal.timeout(
-                this.configurationService.get('REQUEST_TIMEOUT')
-              )
+              signal: AbortSignal.timeout(requestTimeout)
             }
           ).then((res) => res.json());
 
@@ -150,9 +154,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
             const etfHoldings = await fetch(
               `${this.getUrl({ version: 4 })}/etf-holdings?date=${portfolioDate.date}&symbol=${symbol}&apikey=${this.apiKey}`,
               {
-                signal: AbortSignal.timeout(
-                  this.configurationService.get('REQUEST_TIMEOUT')
-                )
+                signal: AbortSignal.timeout(requestTimeout)
               }
             ).then((res) => res.json());
 
@@ -170,9 +172,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
           const etfSectorWeightings = await fetch(
             `${this.URL}/etf-sector-weightings/${symbol}?apikey=${this.apiKey}`,
             {
-              signal: AbortSignal.timeout(
-                this.configurationService.get('REQUEST_TIMEOUT')
-              )
+              signal: AbortSignal.timeout(requestTimeout)
             }
           ).then((res) => res.json());
 
@@ -200,7 +200,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
           response.isin = assetProfile.isin;
         }
 
-        response.name = assetProfile.companyName;
+        response.name = this.formatName({ name: assetProfile.companyName });
 
         if (assetProfile.website) {
           response.url = assetProfile.website;
@@ -211,7 +211,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
 
       if (error?.name === 'AbortError') {
         message = `RequestError: The operation to get the asset profile for ${symbol} was aborted because the request to the data provider took more than ${(
-          this.configurationService.get('REQUEST_TIMEOUT') / 1000
+          requestTimeout / 1000
         ).toFixed(3)} seconds`;
       }
 
@@ -223,6 +223,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
 
   public getDataProviderInfo(): DataProviderInfo {
     return {
+      dataSource: DataSource.FINANCIAL_MODELING_PREP,
       isPremium: true,
       name: 'Financial Modeling Prep',
       url: 'https://financialmodelingprep.com/developer/docs'
@@ -244,7 +245,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
         [date: string]: IDataProviderHistoricalResponse;
       } = {};
 
-      const { historical } = await fetch(
+      const { historical = [] } = await fetch(
         `${this.URL}/historical-price-full/stock_dividend/${symbol}?apikey=${this.apiKey}`,
         {
           signal: AbortSignal.timeout(requestTimeout)
@@ -305,7 +306,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
           ? addYears(currentFrom, MAX_YEARS_PER_REQUEST)
           : to;
 
-        const { historical } = await fetch(
+        const { historical = [] } = await fetch(
           `${this.URL}/historical-price-full/${symbol}?apikey=${this.apiKey}&from=${format(currentFrom, DATE_FORMAT)}&to=${format(currentTo, DATE_FORMAT)}`,
           {
             signal: AbortSignal.timeout(requestTimeout)
@@ -338,6 +339,10 @@ export class FinancialModelingPrepService implements DataProviderInterface {
     }
   }
 
+  public getMaxNumberOfSymbolsPerRequest() {
+    return 20;
+  }
+
   public getName(): DataSource {
     return DataSource.FINANCIAL_MODELING_PREP;
   }
@@ -353,18 +358,28 @@ export class FinancialModelingPrepService implements DataProviderInterface {
     }
 
     try {
+      const currencyBySymbolMap: {
+        [symbol: string]: Pick<SymbolProfile, 'currency'>;
+      } = {};
+
       const quotes = await fetch(
-        `${this.URL}/quote/${symbols.join(',')}?apikey=${this.apiKey}`,
+        `${this.getUrl({ version: 'stable' })}/batch-quote-short?symbols=${symbols.join(',')}&apikey=${this.apiKey}`,
         {
           signal: AbortSignal.timeout(requestTimeout)
         }
       ).then((res) => res.json());
 
-      for (const { price, symbol } of quotes) {
-        const { currency } = await this.getAssetProfile({ symbol });
+      await Promise.all(
+        quotes.map(({ symbol }) => {
+          return this.getAssetProfile({ symbol }).then(({ currency }) => {
+            currencyBySymbolMap[symbol] = { currency };
+          });
+        })
+      );
 
+      for (const { price, symbol } of quotes) {
         response[symbol] = {
-          currency,
+          currency: currencyBySymbolMap[symbol]?.currency,
           dataProviderInfo: this.getDataProviderInfo(),
           dataSource: DataSource.FINANCIAL_MODELING_PREP,
           marketPrice: price,
@@ -376,7 +391,7 @@ export class FinancialModelingPrepService implements DataProviderInterface {
 
       if (error?.name === 'AbortError') {
         message = `RequestError: The operation to get the quotes was aborted because the request to the data provider took more than ${(
-          this.configurationService.get('REQUEST_TIMEOUT') / 1000
+          requestTimeout / 1000
         ).toFixed(3)} seconds`;
       }
 
@@ -391,12 +406,15 @@ export class FinancialModelingPrepService implements DataProviderInterface {
   }
 
   public async search({ query }: GetSearchParams): Promise<LookupResponse> {
+    const assetProfileBySymbolMap: {
+      [symbol: string]: Partial<SymbolProfile>;
+    } = {};
     let items: LookupItem[] = [];
 
     try {
-      if (isISIN(query)) {
+      if (isISIN(query?.toUpperCase())) {
         const result = await fetch(
-          `${this.getUrl({ version: 4 })}/search/isin?isin=${query}&apikey=${this.apiKey}`,
+          `${this.getUrl({ version: 'stable' })}/search-isin?isin=${query.toUpperCase()}&apikey=${this.apiKey}`,
           {
             signal: AbortSignal.timeout(
               this.configurationService.get('REQUEST_TIMEOUT')
@@ -404,15 +422,23 @@ export class FinancialModelingPrepService implements DataProviderInterface {
           }
         ).then((res) => res.json());
 
-        items = result.map(({ companyName, currency, symbol }) => {
+        await Promise.all(
+          result.map(({ symbol }) => {
+            return this.getAssetProfile({ symbol }).then((assetProfile) => {
+              assetProfileBySymbolMap[symbol] = assetProfile;
+            });
+          })
+        );
+
+        items = result.map(({ assetClass, assetSubClass, name, symbol }) => {
           return {
-            currency,
+            assetClass,
+            assetSubClass,
             symbol,
-            assetClass: undefined, // TODO
-            assetSubClass: undefined, // TODO
+            currency: assetProfileBySymbolMap[symbol]?.currency,
             dataProviderInfo: this.getDataProviderInfo(),
             dataSource: this.getName(),
-            name: companyName
+            name: this.formatName({ name })
           };
         });
       } else {
@@ -428,12 +454,12 @@ export class FinancialModelingPrepService implements DataProviderInterface {
         items = result.map(({ currency, name, symbol }) => {
           return {
             currency,
-            name,
             symbol,
             assetClass: undefined, // TODO
             assetSubClass: undefined, // TODO
             dataProviderInfo: this.getDataProviderInfo(),
-            dataSource: this.getName()
+            dataSource: this.getName(),
+            name: this.formatName({ name })
           };
         });
       }
@@ -452,8 +478,26 @@ export class FinancialModelingPrepService implements DataProviderInterface {
     return { items };
   }
 
-  private getUrl({ version }: { version: number }) {
-    return `https://financialmodelingprep.com/api/v${version}`;
+  private formatName({ name }: { name: string }) {
+    if (name) {
+      for (const part of REPLACE_NAME_PARTS) {
+        name = name.replace(part, '');
+      }
+
+      name = name.trim();
+    }
+
+    return name;
+  }
+
+  private getUrl({ version }: { version: number | 'stable' }) {
+    const baseUrl = 'https://financialmodelingprep.com';
+
+    if (version === 'stable') {
+      return `${baseUrl}/stable`;
+    }
+
+    return `${baseUrl}/api/v${version}`;
   }
 
   private parseAssetClass(profile: any): {
@@ -463,15 +507,17 @@ export class FinancialModelingPrepService implements DataProviderInterface {
     let assetClass: AssetClass;
     let assetSubClass: AssetSubClass;
 
-    if (profile.isEtf) {
-      assetClass = AssetClass.EQUITY;
-      assetSubClass = AssetSubClass.ETF;
-    } else if (profile.isFund) {
-      assetClass = AssetClass.EQUITY;
-      assetSubClass = AssetSubClass.MUTUALFUND;
-    } else {
-      assetClass = AssetClass.EQUITY;
-      assetSubClass = AssetSubClass.STOCK;
+    if (profile) {
+      if (profile.isEtf) {
+        assetClass = AssetClass.EQUITY;
+        assetSubClass = AssetSubClass.ETF;
+      } else if (profile.isFund) {
+        assetClass = AssetClass.EQUITY;
+        assetSubClass = AssetSubClass.MUTUALFUND;
+      } else {
+        assetClass = AssetClass.EQUITY;
+        assetSubClass = AssetSubClass.STOCK;
+      }
     }
 
     return { assetClass, assetSubClass };

@@ -4,11 +4,9 @@ import { UpdatePlatformDto } from '@ghostfolio/api/app/platform/update-platform.
 import { IDataProviderHistoricalResponse } from '@ghostfolio/api/services/interfaces/interfaces';
 import {
   HEADER_KEY_SKIP_INTERCEPTOR,
-  HEADER_KEY_TOKEN,
-  PROPERTY_API_KEY_GHOSTFOLIO
+  HEADER_KEY_TOKEN
 } from '@ghostfolio/common/config';
 import { DEFAULT_PAGE_SIZE } from '@ghostfolio/common/config';
-import { DATE_FORMAT } from '@ghostfolio/common/helper';
 import {
   AssetProfileIdentifier,
   AdminData,
@@ -25,8 +23,6 @@ import { Injectable } from '@angular/core';
 import { SortDirection } from '@angular/material/sort';
 import { DataSource, MarketData, Platform } from '@prisma/client';
 import { JobStatus } from 'bull';
-import { format } from 'date-fns';
-import { switchMap } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { DataService } from './data.service';
@@ -117,19 +113,15 @@ export class AdminService {
     });
   }
 
-  public fetchGhostfolioDataProviderStatus() {
-    return this.fetchAdminData().pipe(
-      switchMap(({ settings }) => {
-        const headers = new HttpHeaders({
-          [HEADER_KEY_SKIP_INTERCEPTOR]: 'true',
-          [HEADER_KEY_TOKEN]: `Api-Key ${settings[PROPERTY_API_KEY_GHOSTFOLIO]}`
-        });
+  public fetchGhostfolioDataProviderStatus(aApiKey: string) {
+    const headers = new HttpHeaders({
+      [HEADER_KEY_SKIP_INTERCEPTOR]: 'true',
+      [HEADER_KEY_TOKEN]: `Api-Key ${aApiKey}`
+    });
 
-        return this.http.get<DataProviderGhostfolioStatusResponse>(
-          `${environment.production ? 'https://ghostfol.io' : ''}/api/v2/data-providers/ghostfolio/status`,
-          { headers }
-        );
-      })
+    return this.http.get<DataProviderGhostfolioStatusResponse>(
+      `${environment.production ? 'https://ghostfol.io' : ''}/api/v2/data-providers/ghostfolio/status`,
+      { headers }
     );
   }
 
@@ -186,19 +178,8 @@ export class AdminService {
     );
   }
 
-  public gatherSymbol({
-    dataSource,
-    date,
-    symbol
-  }: AssetProfileIdentifier & {
-    date?: Date;
-  }) {
-    let url = `/api/v1/admin/gather/${dataSource}/${symbol}`;
-
-    if (date) {
-      url = `${url}/${format(date, DATE_FORMAT)}`;
-    }
-
+  public gatherSymbol({ dataSource, symbol }: AssetProfileIdentifier) {
+    const url = `/api/v1/admin/gather/${dataSource}/${symbol}`;
     return this.http.post<MarketData | void>(url, {});
   }
 
@@ -216,20 +197,24 @@ export class AdminService {
     return this.http.get<IDataProviderHistoricalResponse>(url);
   }
 
-  public patchAssetProfile({
-    assetClass,
-    assetSubClass,
-    comment,
-    countries,
-    currency,
-    dataSource,
-    name,
-    scraperConfiguration,
-    sectors,
-    symbol,
-    symbolMapping,
-    url
-  }: AssetProfileIdentifier & UpdateAssetProfileDto) {
+  public patchAssetProfile(
+    { dataSource, symbol }: AssetProfileIdentifier,
+    {
+      assetClass,
+      assetSubClass,
+      comment,
+      countries,
+      currency,
+      dataSource: newDataSource,
+      isActive,
+      name,
+      scraperConfiguration,
+      sectors,
+      symbol: newSymbol,
+      symbolMapping,
+      url
+    }: UpdateAssetProfileDto
+  ) {
     return this.http.patch<EnhancedSymbolProfile>(
       `/api/v1/admin/profile-data/${dataSource}/${symbol}`,
       {
@@ -238,9 +223,12 @@ export class AdminService {
         comment,
         countries,
         currency,
+        dataSource: newDataSource,
+        isActive,
         name,
         scraperConfiguration,
         sectors,
+        symbol: newSymbol,
         symbolMapping,
         url
       }

@@ -134,7 +134,7 @@
           </button>
           <mat-menu
             #assistantMenu="matMenu"
-            class="assistant"
+            class="no-max-width"
             xPosition="before"
             [overlapTrigger]="true"
             (closed)="assistantElement?.setIsOpen(false)"
@@ -181,14 +181,10 @@
             <a class="d-flex" mat-menu-item [routerLink]="routerLinkPricing"
               ><span class="align-items-center d-flex"
                 ><span>
-                  @if (user.subscription.offer === 'default') {
-                    <ng-container i18n>Upgrade Plan</ng-container>
-                  } @else if (
-                    user.subscription.offer === 'renewal' ||
-                    user.subscription.offer === 'renewal-early-bird-2023' ||
-                    user.subscription.offer === 'renewal-early-bird-2024'
-                  ) {
+                  @if (user.subscription.offer.isRenewal) {
                     <ng-container i18n>Renew Plan</ng-container>
+                  } @else {
+                    <ng-container i18n>Upgrade Plan</ng-container>
                   }
                 </span>
                 <gf-premium-indicator
@@ -316,7 +312,7 @@
             >About Ghostfolio</a
           >
           <hr class="d-flex d-sm-none m-0" />
-          <button mat-menu-item (click)="onSignOut()">Logout</button>
+          <button i18n mat-menu-item (click)="onSignOut()">Log out</button>
         </mat-menu>
       </li>
     </ul>

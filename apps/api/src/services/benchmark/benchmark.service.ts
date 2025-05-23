@@ -133,7 +133,9 @@ export class BenchmarkService {
           symbol
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        return a.name?.localeCompare(b?.name) ?? 0;
+      });
   }
 
   public async addBenchmark({
@@ -208,6 +210,18 @@ export class BenchmarkService {
       id: assetProfile.id,
       name: assetProfile.name
     };
+  }
+
+  public getMarketCondition(
+    aPerformanceInPercent: number
+  ): Benchmark['marketCondition'] {
+    if (aPerformanceInPercent >= 0) {
+      return 'ALL_TIME_HIGH';
+    } else if (aPerformanceInPercent <= -0.2) {
+      return 'BEAR_MARKET';
+    } else {
+      return 'NEUTRAL_MARKET';
+    }
   }
 
   private async calculateAndCacheBenchmarks({
@@ -299,17 +313,5 @@ export class BenchmarkService {
     }
 
     return benchmarks;
-  }
-
-  private getMarketCondition(
-    aPerformanceInPercent: number
-  ): Benchmark['marketCondition'] {
-    if (aPerformanceInPercent >= 0) {
-      return 'ALL_TIME_HIGH';
-    } else if (aPerformanceInPercent <= -0.2) {
-      return 'BEAR_MARKET';
-    } else {
-      return 'NEUTRAL_MARKET';
-    }
   }
 }
