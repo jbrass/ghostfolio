@@ -1,5 +1,5 @@
 import { Activity } from '@ghostfolio/api/app/order/interfaces/activities.interface';
-import { GfAccountsTableModule } from '@ghostfolio/client/components/accounts-table/accounts-table.module';
+import { GfAccountsTableComponent } from '@ghostfolio/client/components/accounts-table/accounts-table.component';
 import { GfDialogFooterModule } from '@ghostfolio/client/components/dialog-footer/dialog-footer.module';
 import { GfDialogHeaderModule } from '@ghostfolio/client/components/dialog-header/dialog-header.module';
 import { DataService } from '@ghostfolio/client/services/data.service';
@@ -13,8 +13,8 @@ import {
   LineChartItem,
   User
 } from '@ghostfolio/common/interfaces';
-import { paths } from '@ghostfolio/common/paths';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+import { internalRoutes } from '@ghostfolio/common/routes/routes';
 import { GfActivitiesTableComponent } from '@ghostfolio/ui/activities-table';
 import { GfDataProviderCreditsComponent } from '@ghostfolio/ui/data-provider-credits';
 import { GfHistoricalMarketDataEditorComponent } from '@ghostfolio/ui/historical-market-data-editor';
@@ -46,9 +46,20 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { SortDirection } from '@angular/material/sort';
 import { MatTableDataSource } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
-import { Router } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
+import { IonIcon } from '@ionic/angular/standalone';
 import { Account, MarketData, Tag } from '@prisma/client';
+import { isUUID } from 'class-validator';
 import { format, isSameMonth, isToday, parseISO } from 'date-fns';
+import { addIcons } from 'ionicons';
+import {
+  createOutline,
+  flagOutline,
+  readerOutline,
+  serverOutline,
+  swapVerticalOutline,
+  walletOutline
+} from 'ionicons/icons';
 import { NgxSkeletonLoaderModule } from 'ngx-skeleton-loader';
 import { Subject } from 'rxjs';
 import { switchMap, takeUntil } from 'rxjs/operators';
@@ -60,7 +71,7 @@ import { HoldingDetailDialogParams } from './interfaces/interfaces';
   host: { class: 'd-flex flex-column h-100' },
   imports: [
     CommonModule,
-    GfAccountsTableModule,
+    GfAccountsTableComponent,
     GfActivitiesTableComponent,
     GfDataProviderCreditsComponent,
     GfDialogFooterModule,
@@ -70,12 +81,14 @@ import { HoldingDetailDialogParams } from './interfaces/interfaces';
     GfPortfolioProportionChartComponent,
     GfTagsSelectorComponent,
     GfValueComponent,
+    IonIcon,
     MatButtonModule,
     MatChipsModule,
     MatDialogModule,
     MatFormFieldModule,
     MatTabsModule,
-    NgxSkeletonLoaderModule
+    NgxSkeletonLoaderModule,
+    RouterModule
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   selector: 'gf-holding-detail-dialog',
@@ -89,6 +102,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   public assetSubClass: string;
   public averagePrice: number;
   public benchmarkDataItems: LineChartItem[];
+  public benchmarkLabel = $localize`Average Unit Price`;
   public countries: {
     [code: string]: { name: string; value: number };
   };
@@ -102,8 +116,9 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   public hasPermissionToCreateOwnTag: boolean;
   public hasPermissionToReadMarketDataOfOwnAssetProfile: boolean;
   public historicalDataItems: LineChartItem[];
-  public investment: number;
-  public investmentPrecision = 2;
+  public investmentInBaseCurrencyWithCurrencyEffect: number;
+  public investmentInBaseCurrencyWithCurrencyEffectPrecision = 2;
+  public isUUID = isUUID;
   public marketDataItems: MarketData[] = [];
   public marketPrice: number;
   public marketPriceMax: number;
@@ -117,6 +132,8 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   public quantity: number;
   public quantityPrecision = 2;
   public reportDataGlitchMail: string;
+  public routerLinkAdminControlMarketData =
+    internalRoutes.adminControl.subRoutes.marketData.routerLink;
   public sectors: {
     [name: string]: { name: string; value: number };
   };
@@ -140,7 +157,16 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
     private formBuilder: FormBuilder,
     private router: Router,
     private userService: UserService
-  ) {}
+  ) {
+    addIcons({
+      createOutline,
+      flagOutline,
+      readerOutline,
+      serverOutline,
+      swapVerticalOutline,
+      walletOutline
+    });
+  }
 
   public ngOnInit() {
     this.activityForm = this.formBuilder.group({
@@ -233,7 +259,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
           feeInBaseCurrency,
           firstBuyDate,
           historicalData,
-          investment,
+          investmentInBaseCurrencyWithCurrencyEffect,
           marketPrice,
           marketPriceMax,
           marketPriceMin,
@@ -288,13 +314,15 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
             }
           );
 
-          this.investment = investment;
+          this.investmentInBaseCurrencyWithCurrencyEffect =
+            investmentInBaseCurrencyWithCurrencyEffect;
 
           if (
             this.data.deviceType === 'mobile' &&
-            this.investment >= NUMERICAL_PRECISION_THRESHOLD
+            this.investmentInBaseCurrencyWithCurrencyEffect >=
+              NUMERICAL_PRECISION_THRESHOLD
           ) {
-            this.investmentPrecision = 0;
+            this.investmentInBaseCurrencyWithCurrencyEffectPrecision = 0;
           }
 
           this.marketPrice = marketPrice;
@@ -450,10 +478,9 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
         if (state?.user) {
           this.user = state.user;
 
-          this.hasPermissionToCreateOwnTag = hasPermission(
-            this.user.permissions,
-            permissions.createOwnTag
-          );
+          this.hasPermissionToCreateOwnTag =
+            hasPermission(this.user.permissions, permissions.createOwnTag) &&
+            this.user?.settings?.isExperimentalFeatures;
 
           this.tagsAvailable =
             this.user?.tags?.map((tag) => {
@@ -469,9 +496,12 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   }
 
   public onCloneActivity(aActivity: Activity) {
-    this.router.navigate(['/' + paths.portfolio, paths.activities], {
-      queryParams: { activityId: aActivity.id, createDialog: true }
-    });
+    this.router.navigate(
+      internalRoutes.portfolio.subRoutes.activities.routerLink,
+      {
+        queryParams: { activityId: aActivity.id, createDialog: true }
+      }
+    );
 
     this.dialogRef.close();
   }
@@ -511,9 +541,12 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   }
 
   public onUpdateActivity(aActivity: Activity) {
-    this.router.navigate(['/' + paths.portfolio, paths.activities], {
-      queryParams: { activityId: aActivity.id, editDialog: true }
-    });
+    this.router.navigate(
+      internalRoutes.portfolio.subRoutes.activities.routerLink,
+      {
+        queryParams: { activityId: aActivity.id, editDialog: true }
+      }
+    );
 
     this.dialogRef.close();
   }
