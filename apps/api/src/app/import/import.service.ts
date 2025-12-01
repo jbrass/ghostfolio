@@ -1,10 +1,4 @@
 import { AccountService } from '@ghostfolio/api/app/account/account.service';
-import { CreateAccountDto } from '@ghostfolio/api/app/account/create-account.dto';
-import { CreateOrderDto } from '@ghostfolio/api/app/order/create-order.dto';
-import {
-  Activity,
-  ActivityError
-} from '@ghostfolio/api/app/order/interfaces/activities.interface';
 import { OrderService } from '@ghostfolio/api/app/order/order.service';
 import { PlatformService } from '@ghostfolio/api/app/platform/platform.service';
 import { PortfolioService } from '@ghostfolio/api/app/portfolio/portfolio.service';
@@ -13,12 +7,23 @@ import { DataProviderService } from '@ghostfolio/api/services/data-provider/data
 import { MarketDataService } from '@ghostfolio/api/services/market-data/market-data.service';
 import { DataGatheringService } from '@ghostfolio/api/services/queues/data-gathering/data-gathering.service';
 import { SymbolProfileService } from '@ghostfolio/api/services/symbol-profile/symbol-profile.service';
+import { TagService } from '@ghostfolio/api/services/tag/tag.service';
 import { DATA_GATHERING_QUEUE_PRIORITY_HIGH } from '@ghostfolio/common/config';
+import {
+  CreateAssetProfileDto,
+  CreateAccountDto,
+  CreateOrderDto
+} from '@ghostfolio/common/dtos';
 import {
   getAssetProfileIdentifier,
   parseDate
 } from '@ghostfolio/common/helper';
-import { AssetProfileIdentifier } from '@ghostfolio/common/interfaces';
+import {
+  Activity,
+  ActivityError,
+  AssetProfileIdentifier
+} from '@ghostfolio/common/interfaces';
+import { hasPermission, permissions } from '@ghostfolio/common/permissions';
 import {
   AccountWithPlatform,
   OrderWithAccount,
@@ -30,9 +35,8 @@ import { DataSource, Prisma, SymbolProfile } from '@prisma/client';
 import { Big } from 'big.js';
 import { endOfToday, isAfter, isSameSecond, parseISO } from 'date-fns';
 import { omit, uniqBy } from 'lodash';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 
-import { CreateAssetProfileDto } from '../admin/create-asset-profile.dto';
 import { ImportDataDto } from './import-data.dto';
 
 @Injectable()
@@ -46,7 +50,8 @@ export class ImportService {
     private readonly orderService: OrderService,
     private readonly platformService: PlatformService,
     private readonly portfolioService: PortfolioService,
-    private readonly symbolProfileService: SymbolProfileService
+    private readonly symbolProfileService: SymbolProfileService,
+    private readonly tagService: TagService
   ) {}
 
   public async getDividends({
@@ -55,13 +60,18 @@ export class ImportService {
     userId
   }: AssetProfileIdentifier & { userId: string }): Promise<Activity[]> {
     try {
-      const { activities, firstBuyDate, historicalData } =
-        await this.portfolioService.getHolding({
-          dataSource,
-          symbol,
-          userId,
-          impersonationId: undefined
-        });
+      const holding = await this.portfolioService.getHolding({
+        dataSource,
+        symbol,
+        userId,
+        impersonationId: undefined
+      });
+
+      if (!holding) {
+        return [];
+      }
+
+      const { activities, firstBuyDate, historicalData } = holding;
 
       const [[assetProfile], dividends] = await Promise.all([
         this.symbolProfileService.getSymbolProfiles([
@@ -154,6 +164,7 @@ export class ImportService {
     assetProfilesWithMarketDataDto,
     isDryRun = false,
     maxActivitiesToImport,
+    tagsDto,
     user
   }: {
     accountsWithBalancesDto: ImportDataDto['accounts'];
@@ -161,10 +172,12 @@ export class ImportService {
     assetProfilesWithMarketDataDto: ImportDataDto['assetProfiles'];
     isDryRun?: boolean;
     maxActivitiesToImport: number;
+    tagsDto: ImportDataDto['tags'];
     user: UserWithSettings;
   }): Promise<Activity[]> {
     const accountIdMapping: { [oldAccountId: string]: string } = {};
     const assetProfileSymbolMapping: { [oldSymbol: string]: string } = {};
+    const tagIdMapping: { [oldTagId: string]: string } = {};
     const userCurrency = user.settings.settings.baseCurrency;
 
     if (!isDryRun && accountsWithBalancesDto?.length) {
@@ -264,7 +277,7 @@ export class ImportService {
 
           // Asset profile belongs to a different user
           if (existingAssetProfile) {
-            const symbol = uuidv4();
+            const symbol = randomUUID();
             assetProfileSymbolMapping[assetProfile.symbol] = symbol;
             assetProfile.symbol = symbol;
           }
@@ -293,6 +306,50 @@ export class ImportService {
       }
     }
 
+    if (tagsDto?.length) {
+      const existingTagsOfUser = await this.tagService.getTagsForUser(user.id);
+
+      const canCreateOwnTag = hasPermission(
+        user.permissions,
+        permissions.createOwnTag
+      );
+
+      for (const tag of tagsDto) {
+        const existingTagOfUser = existingTagsOfUser.find(({ id }) => {
+          return id === tag.id;
+        });
+
+        if (!existingTagOfUser || existingTagOfUser.userId !== null) {
+          if (!canCreateOwnTag) {
+            throw new Error(
+              `Insufficient permissions to create custom tag ("${tag.name}")`
+            );
+          }
+
+          if (!isDryRun) {
+            const existingTag = await this.tagService.getTag({ id: tag.id });
+            let oldTagId: string;
+
+            if (existingTag) {
+              oldTagId = tag.id;
+              delete tag.id;
+            }
+
+            const tagObject: Prisma.TagCreateInput = {
+              ...tag,
+              user: { connect: { id: user.id } }
+            };
+
+            const newTag = await this.tagService.createTag(tagObject);
+
+            if (existingTag && oldTagId) {
+              tagIdMapping[oldTagId] = newTag.id;
+            }
+          }
+        }
+      }
+    }
+
     for (const activity of activitiesDto) {
       if (!activity.dataSource) {
         if (['FEE', 'INTEREST', 'LIABILITY'].includes(activity.type)) {
@@ -313,11 +370,17 @@ export class ImportService {
         if (assetProfileSymbolMapping[activity.symbol]) {
           activity.symbol = assetProfileSymbolMapping[activity.symbol];
         }
+
+        // If a new tag is created, then update the tag ID in all activities
+        activity.tags = (activity.tags ?? []).map((tagId) => {
+          return tagIdMapping[tagId] ?? tagId;
+        });
       }
     }
 
     const assetProfiles = await this.validateActivities({
       activitiesDto,
+      assetProfilesWithMarketDataDto,
       maxActivitiesToImport,
       user
     });
@@ -340,6 +403,24 @@ export class ImportService {
       });
     }
 
+    const tags = (await this.tagService.getTagsForUser(user.id)).map(
+      ({ id, name }) => {
+        return { id, name };
+      }
+    );
+
+    if (isDryRun) {
+      tagsDto
+        .filter(({ id }) => {
+          return !tags.some(({ id: tagId }) => {
+            return tagId === id;
+          });
+        })
+        .forEach(({ id, name }) => {
+          tags.push({ id, name });
+        });
+    }
+
     const activities: Activity[] = [];
 
     for (const activity of activitiesExtendedWithErrors) {
@@ -351,6 +432,7 @@ export class ImportService {
       const fee = activity.fee;
       const quantity = activity.quantity;
       const SymbolProfile = activity.SymbolProfile;
+      const tagIds = activity.tagIds ?? [];
       const type = activity.type;
       const unitPrice = activity.unitPrice;
 
@@ -388,11 +470,17 @@ export class ImportService {
       const validatedAccount = accounts.find(({ id }) => {
         return id === accountId;
       });
+      const validatedTags = tags.filter(({ id: tagId }) => {
+        return tagIds.some((activityTagId) => {
+          return activityTagId === tagId;
+        });
+      });
 
       let order:
         | OrderWithAccount
-        | (Omit<OrderWithAccount, 'Account'> & {
-            Account?: { id: string; name: string };
+        | (Omit<OrderWithAccount, 'account' | 'tags'> & {
+            account?: { id: string; name: string };
+            tags?: { id: string; name: string }[];
           });
 
       if (isDryRun) {
@@ -404,11 +492,11 @@ export class ImportService {
           quantity,
           type,
           unitPrice,
-          Account: validatedAccount,
+          account: validatedAccount,
           accountId: validatedAccount?.id,
           accountUserId: undefined,
           createdAt: new Date(),
-          id: uuidv4(),
+          id: randomUUID(),
           isDraft: isAfter(date, endOfToday()),
           SymbolProfile: {
             assetClass,
@@ -436,6 +524,7 @@ export class ImportService {
             userId: dataSource === 'MANUAL' ? user.id : undefined
           },
           symbolProfileId: undefined,
+          tags: validatedTags,
           updatedAt: new Date(),
           userId: user.id
         };
@@ -457,6 +546,7 @@ export class ImportService {
             connectOrCreate: {
               create: {
                 dataSource,
+                name,
                 symbol,
                 currency: assetProfile.currency,
                 userId: dataSource === 'MANUAL' ? user.id : undefined
@@ -469,6 +559,9 @@ export class ImportService {
               }
             }
           },
+          tags: validatedTags.map(({ id }) => {
+            return { id };
+          }),
           updateAccountBalance: false,
           user: { connect: { id: user.id } },
           userId: user.id
@@ -533,7 +626,7 @@ export class ImportService {
         userCurrency,
         userId,
         includeDrafts: true,
-        withExcludedAccounts: true
+        withExcludedAccountsAndActivities: true
       });
 
     return activitiesDto.map(
@@ -546,6 +639,7 @@ export class ImportService {
         fee,
         quantity,
         symbol,
+        tags,
         type,
         unitPrice
       }) => {
@@ -594,7 +688,8 @@ export class ImportService {
             isActive: true,
             sectors: undefined,
             updatedAt: undefined
-          }
+          },
+          tagIds: tags
         };
       }
     );
@@ -612,10 +707,12 @@ export class ImportService {
 
   private async validateActivities({
     activitiesDto,
+    assetProfilesWithMarketDataDto,
     maxActivitiesToImport,
     user
   }: {
     activitiesDto: Partial<CreateOrderDto>[];
+    assetProfilesWithMarketDataDto: ImportDataDto['assetProfiles'];
     maxActivitiesToImport: number;
     user: UserWithSettings;
   }) {
@@ -626,18 +723,12 @@ export class ImportService {
     const assetProfiles: {
       [assetProfileIdentifier: string]: Partial<SymbolProfile>;
     } = {};
-    const dataSources = await this.dataProviderService.getDataSources({ user });
+    const dataSources = await this.dataProviderService.getDataSources();
 
     for (const [
       index,
       { currency, dataSource, symbol, type }
     ] of activitiesDto.entries()) {
-      if (type === 'ITEM') {
-        throw new Error(
-          `activities.${index}.type ("${type}") is deprecated, please use "BUY" instead`
-        );
-      }
-
       if (!dataSources.includes(dataSource)) {
         throw new Error(
           `activities.${index}.dataSource ("${dataSource}") is not valid`
@@ -660,20 +751,73 @@ export class ImportService {
       }
 
       if (!assetProfiles[getAssetProfileIdentifier({ dataSource, symbol })]) {
-        const assetProfile = {
-          currency,
-          ...(
+        if (['FEE', 'INTEREST', 'LIABILITY'].includes(type)) {
+          // Skip asset profile validation for FEE, INTEREST, and LIABILITY
+          // as these activity types don't require asset profiles
+          const assetProfileInImport = assetProfilesWithMarketDataDto?.find(
+            (profile) => {
+              return (
+                profile.dataSource === dataSource && profile.symbol === symbol
+              );
+            }
+          );
+
+          assetProfiles[getAssetProfileIdentifier({ dataSource, symbol })] = {
+            currency,
+            dataSource,
+            symbol,
+            name: assetProfileInImport?.name
+          };
+
+          continue;
+        }
+
+        let assetProfile: Partial<SymbolProfile> = { currency };
+
+        try {
+          assetProfile = (
             await this.dataProviderService.getAssetProfiles([
               { dataSource, symbol }
             ])
-          )?.[symbol]
-        };
+          )?.[symbol];
+        } catch {}
 
-        if (
-          (dataSource !== 'MANUAL' && type === 'BUY') ||
-          type === 'DIVIDEND' ||
-          type === 'SELL'
-        ) {
+        if (!assetProfile?.name) {
+          const assetProfileInImport = assetProfilesWithMarketDataDto?.find(
+            (profile) => {
+              return (
+                profile.dataSource === dataSource && profile.symbol === symbol
+              );
+            }
+          );
+
+          if (assetProfileInImport) {
+            // Merge all fields of custom asset profiles into the validation object
+            Object.assign(assetProfile, {
+              assetClass: assetProfileInImport.assetClass,
+              assetSubClass: assetProfileInImport.assetSubClass,
+              comment: assetProfileInImport.comment,
+              countries: assetProfileInImport.countries,
+              currency: assetProfileInImport.currency,
+              cusip: assetProfileInImport.cusip,
+              dataSource: assetProfileInImport.dataSource,
+              figi: assetProfileInImport.figi,
+              figiComposite: assetProfileInImport.figiComposite,
+              figiShareClass: assetProfileInImport.figiShareClass,
+              holdings: assetProfileInImport.holdings,
+              isActive: assetProfileInImport.isActive,
+              isin: assetProfileInImport.isin,
+              name: assetProfileInImport.name,
+              scraperConfiguration: assetProfileInImport.scraperConfiguration,
+              sectors: assetProfileInImport.sectors,
+              symbol: assetProfileInImport.symbol,
+              symbolMapping: assetProfileInImport.symbolMapping,
+              url: assetProfileInImport.url
+            });
+          }
+        }
+
+        if (!['FEE', 'INTEREST', 'LIABILITY'].includes(type)) {
           if (!assetProfile?.name) {
             throw new Error(
               `activities.${index}.symbol ("${symbol}") is not valid for the specified data source ("${dataSource}")`

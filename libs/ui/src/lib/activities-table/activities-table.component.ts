@@ -1,10 +1,16 @@
-import { Activity } from '@ghostfolio/api/app/order/interfaces/activities.interface';
-import { ConfirmationDialogType } from '@ghostfolio/client/core/notification/confirmation-dialog/confirmation-dialog.type';
+/* eslint-disable @nx/enforce-module-boundaries */
 import { NotificationService } from '@ghostfolio/client/core/notification/notification.service';
-import { GfSymbolModule } from '@ghostfolio/client/pipes/symbol/symbol.module';
-import { DEFAULT_PAGE_SIZE } from '@ghostfolio/common/config';
-import { getDateFormatString, getLocale } from '@ghostfolio/common/helper';
-import { AssetProfileIdentifier } from '@ghostfolio/common/interfaces';
+import {
+  DEFAULT_PAGE_SIZE,
+  TAG_ID_EXCLUDE_FROM_ANALYSIS
+} from '@ghostfolio/common/config';
+import { ConfirmationDialogType } from '@ghostfolio/common/enums';
+import { getLocale } from '@ghostfolio/common/helper';
+import {
+  Activity,
+  AssetProfileIdentifier
+} from '@ghostfolio/common/interfaces';
+import { GfSymbolPipe } from '@ghostfolio/common/pipes';
 import { OrderWithAccount } from '@ghostfolio/common/types';
 
 import { SelectionModel } from '@angular/cdk/collections';
@@ -53,6 +59,7 @@ import {
   documentTextOutline,
   ellipsisHorizontal,
   ellipsisVertical,
+  tabletLandscapeOutline,
   trashOutline
 } from 'ionicons/icons';
 import { NgxSkeletonLoaderModule } from 'ngx-skeleton-loader';
@@ -70,7 +77,7 @@ import { GfValueComponent } from '../value/value.component';
     GfActivityTypeComponent,
     GfEntityLogoComponent,
     GfNoTransactionsInfoComponent,
-    GfSymbolModule,
+    GfSymbolPipe,
     GfValueComponent,
     IonIcon,
     MatButtonModule,
@@ -101,6 +108,7 @@ export class GfActivitiesTableComponent
   @Input() locale = getLocale();
   @Input() pageIndex: number;
   @Input() pageSize = DEFAULT_PAGE_SIZE;
+  @Input() showAccountColumn = true;
   @Input() showActions = true;
   @Input() showCheckbox = false;
   @Input() showNameColumn = true;
@@ -125,7 +133,6 @@ export class GfActivitiesTableComponent
   @ViewChild(MatPaginator) paginator: MatPaginator;
   @ViewChild(MatSort) sort: MatSort;
 
-  public defaultDateFormat: string;
   public displayedColumns = [];
   public endOfToday = endOfToday();
   public hasDrafts = false;
@@ -150,6 +157,7 @@ export class GfActivitiesTableComponent
       documentTextOutline,
       ellipsisHorizontal,
       ellipsisVertical,
+      tabletLandscapeOutline,
       trashOutline
     });
   }
@@ -166,20 +174,16 @@ export class GfActivitiesTableComponent
   }
 
   public ngAfterViewInit() {
+    if (this.dataSource) {
+      this.dataSource.paginator = this.paginator;
+    }
+
     this.sort.sortChange.subscribe((value: Sort) => {
       this.sortChanged.emit(value);
     });
   }
 
-  public areAllRowsSelected() {
-    const numSelectedRows = this.selectedRows.selected.length;
-    const numTotalRows = this.dataSource.data.length;
-    return numSelectedRows === numTotalRows;
-  }
-
   public ngOnChanges() {
-    this.defaultDateFormat = getDateFormatString(this.locale);
-
     this.displayedColumns = [
       'select',
       'importStatus',
@@ -198,6 +202,12 @@ export class GfActivitiesTableComponent
       'actions'
     ];
 
+    if (!this.showAccountColumn) {
+      this.displayedColumns = this.displayedColumns.filter((column) => {
+        return column !== 'account';
+      });
+    }
+
     if (!this.showCheckbox) {
       this.displayedColumns = this.displayedColumns.filter((column) => {
         return column !== 'importStatus' && column !== 'select';
@@ -215,6 +225,30 @@ export class GfActivitiesTableComponent
     }
   }
 
+  public areAllRowsSelected() {
+    const numSelectedRows = this.selectedRows.selected.length;
+    const numTotalRows = this.dataSource.data.length;
+    return numSelectedRows === numTotalRows;
+  }
+
+  public canClickActivity(activity: Activity) {
+    return (
+      this.hasPermissionToOpenDetails &&
+      this.isExcludedFromAnalysis(activity) === false &&
+      activity.isDraft === false &&
+      ['BUY', 'DIVIDEND', 'SELL'].includes(activity.type)
+    );
+  }
+
+  public isExcludedFromAnalysis(activity: Activity) {
+    return (
+      activity.account?.isExcluded ||
+      activity.tags?.some(({ id }) => {
+        return id === TAG_ID_EXCLUDE_FROM_ANALYSIS;
+      })
+    );
+  }
+
   public onChangePage(page: PageEvent) {
     this.pageChanged.emit(page);
   }
@@ -224,12 +258,7 @@ export class GfActivitiesTableComponent
       if (!activity.error) {
         this.selectedRows.toggle(activity);
       }
-    } else if (
-      this.hasPermissionToOpenDetails &&
-      activity.account?.isExcluded !== true &&
-      activity.isDraft === false &&
-      ['BUY', 'DIVIDEND', 'SELL'].includes(activity.type)
-    ) {
+    } else if (this.canClickActivity(activity)) {
       this.activityClicked.emit({
         dataSource: activity.SymbolProfile.dataSource,
         symbol: activity.SymbolProfile.symbol

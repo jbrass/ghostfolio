@@ -1,4 +1,3 @@
-import { Activity } from '@ghostfolio/api/app/order/interfaces/activities.interface';
 import { CurrentRateService } from '@ghostfolio/api/app/portfolio/current-rate.service';
 import { PortfolioOrder } from '@ghostfolio/api/app/portfolio/interfaces/portfolio-order.interface';
 import { PortfolioSnapshotValue } from '@ghostfolio/api/app/portfolio/interfaces/snapshot-value.interface';
@@ -9,7 +8,7 @@ import { getFactor } from '@ghostfolio/api/helper/portfolio.helper';
 import { LogPerformance } from '@ghostfolio/api/interceptors/performance-logging/performance-logging.interceptor';
 import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
 import { ExchangeRateDataService } from '@ghostfolio/api/services/exchange-rate-data/exchange-rate-data.service';
-import { IDataGatheringItem } from '@ghostfolio/api/services/interfaces/interfaces';
+import { DataGatheringItem } from '@ghostfolio/api/services/interfaces/interfaces';
 import { PortfolioSnapshotService } from '@ghostfolio/api/services/queues/portfolio-snapshot/portfolio-snapshot.service';
 import { getIntervalFromDateRange } from '@ghostfolio/common/calculation-helper';
 import {
@@ -26,6 +25,7 @@ import {
   resetHours
 } from '@ghostfolio/common/helper';
 import {
+  Activity,
   AssetProfileIdentifier,
   DataProviderInfo,
   Filter,
@@ -193,7 +193,7 @@ export abstract class PortfolioCalculator {
     }
 
     const currencies: { [symbol: string]: string } = {};
-    const dataGatheringItems: IDataGatheringItem[] = [];
+    const dataGatheringItems: DataGatheringItem[] = [];
     let firstIndex = transactionPoints.length;
     let firstTransactionPoint: TransactionPoint = null;
     let totalInterestWithCurrencyEffect = new Big(0);
@@ -336,7 +336,7 @@ export abstract class PortfolioCalculator {
       ).mul(
         exchangeRatesByCurrency[`${item.currency}${this.currency}`]?.[
           endDateString
-        ]
+        ] ?? 1
       );
 
       const {
@@ -922,18 +922,36 @@ export abstract class PortfolioCalculator {
       if (oldAccumulatedSymbol) {
         let investment = oldAccumulatedSymbol.investment;
 
-        const newQuantity = quantity
+        let newQuantity = quantity
           .mul(factor)
           .plus(oldAccumulatedSymbol.quantity);
 
         if (type === 'BUY') {
-          investment = oldAccumulatedSymbol.investment.plus(
-            quantity.mul(unitPrice)
-          );
+          if (oldAccumulatedSymbol.investment.gte(0)) {
+            investment = oldAccumulatedSymbol.investment.plus(
+              quantity.mul(unitPrice)
+            );
+          } else {
+            investment = oldAccumulatedSymbol.investment.plus(
+              quantity.mul(oldAccumulatedSymbol.averagePrice)
+            );
+          }
         } else if (type === 'SELL') {
-          investment = oldAccumulatedSymbol.investment.minus(
-            quantity.mul(oldAccumulatedSymbol.averagePrice)
-          );
+          if (oldAccumulatedSymbol.investment.gt(0)) {
+            investment = oldAccumulatedSymbol.investment.minus(
+              quantity.mul(oldAccumulatedSymbol.averagePrice)
+            );
+          } else {
+            investment = oldAccumulatedSymbol.investment.minus(
+              quantity.mul(unitPrice)
+            );
+          }
+        }
+
+        if (newQuantity.abs().lt(Number.EPSILON)) {
+          // Reset to zero if quantity is (almost) zero to avoid rounding issues
+          investment = new Big(0);
+          newQuantity = new Big(0);
         }
 
         currentTransactionPointItem = {
@@ -942,9 +960,9 @@ export abstract class PortfolioCalculator {
           investment,
           skipErrors,
           symbol,
-          averagePrice: newQuantity.gt(0)
-            ? investment.div(newQuantity)
-            : new Big(0),
+          averagePrice: newQuantity.eq(0)
+            ? new Big(0)
+            : investment.div(newQuantity).abs(),
           dividend: new Big(0),
           fee: oldAccumulatedSymbol.fee.plus(fee),
           firstBuyDate: oldAccumulatedSymbol.firstBuyDate,

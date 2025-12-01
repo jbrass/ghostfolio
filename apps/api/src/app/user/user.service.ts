@@ -13,6 +13,7 @@ import { EconomicMarketClusterRiskDevelopedMarkets } from '@ghostfolio/api/model
 import { EconomicMarketClusterRiskEmergingMarkets } from '@ghostfolio/api/models/rules/economic-market-cluster-risk/emerging-markets';
 import { EmergencyFundSetup } from '@ghostfolio/api/models/rules/emergency-fund/emergency-fund-setup';
 import { FeeRatioInitialInvestment } from '@ghostfolio/api/models/rules/fees/fee-ratio-initial-investment';
+import { BuyingPower } from '@ghostfolio/api/models/rules/liquidity/buying-power';
 import { RegionalMarketClusterRiskAsiaPacific } from '@ghostfolio/api/models/rules/regional-market-cluster-risk/asia-pacific';
 import { RegionalMarketClusterRiskEmergingMarkets } from '@ghostfolio/api/models/rules/regional-market-cluster-risk/emerging-markets';
 import { RegionalMarketClusterRiskEurope } from '@ghostfolio/api/models/rules/regional-market-cluster-risk/europe';
@@ -28,6 +29,7 @@ import {
   DEFAULT_LANGUAGE_CODE,
   PROPERTY_IS_READ_ONLY_MODE,
   PROPERTY_SYSTEM_MESSAGE,
+  TAG_ID_EXCLUDE_FROM_ANALYSIS,
   locale
 } from '@ghostfolio/common/config';
 import {
@@ -46,9 +48,9 @@ import { PerformanceCalculationType } from '@ghostfolio/common/types/performance
 import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, Role, User } from '@prisma/client';
-import { createHmac } from 'crypto';
 import { differenceInDays, subDays } from 'date-fns';
 import { sortBy, without } from 'lodash';
+import { createHmac } from 'node:crypto';
 
 @Injectable()
 export class UserService {
@@ -121,7 +123,9 @@ export class UserService {
     const access = userData[0];
     const activitiesCount = userData[1];
     const firstActivity = userData[2];
-    let tags = userData[3];
+    let tags = userData[3].filter((tag) => {
+      return tag.id !== TAG_ID_EXCLUDE_FROM_ANALYSIS;
+    });
 
     let systemMessage: SystemMessage;
 
@@ -180,6 +184,7 @@ export class UserService {
     userWhereUniqueInput: Prisma.UserWhereUniqueInput
   ): Promise<UserWithSettings | null> {
     const {
+      _count,
       accessesGet,
       accessToken,
       accounts,
@@ -195,6 +200,11 @@ export class UserService {
       updatedAt
     } = await this.prismaService.user.findUnique({
       include: {
+        _count: {
+          select: {
+            activities: true
+          }
+        },
         accessesGet: true,
         accounts: {
           include: { platform: true }
@@ -205,6 +215,8 @@ export class UserService {
       },
       where: userWhereUniqueInput
     });
+
+    const activitiesCount = _count?.activities ?? 0;
 
     const user: UserWithSettings = {
       accessesGet,
@@ -253,6 +265,11 @@ export class UserService {
         PerformanceCalculationType.ROAI;
     }
 
+    // Set default value for safe withdrawal rate
+    if (!(user.settings.settings as UserSettings)?.safeWithdrawalRate) {
+      (user.settings.settings as UserSettings).safeWithdrawalRate = 0.04;
+    }
+
     // Set default value for view mode
     if (!(user.settings.settings as UserSettings).viewMode) {
       (user.settings.settings as UserSettings).viewMode = 'DEFAULT';
@@ -279,6 +296,12 @@ export class UserService {
         undefined
       ).getSettings(user.settings.settings),
       AssetClassClusterRiskFixedIncome: new AssetClassClusterRiskFixedIncome(
+        undefined,
+        undefined,
+        undefined,
+        undefined
+      ).getSettings(user.settings.settings),
+      BuyingPower: new BuyingPower(
         undefined,
         undefined,
         undefined,
@@ -394,13 +417,13 @@ export class UserService {
         );
         let frequency = 7;
 
-        if (daysSinceRegistration > 720) {
+        if (activitiesCount > 1000 || daysSinceRegistration > 720) {
           frequency = 1;
-        } else if (daysSinceRegistration > 360) {
+        } else if (activitiesCount > 750 || daysSinceRegistration > 360) {
           frequency = 2;
-        } else if (daysSinceRegistration > 180) {
+        } else if (activitiesCount > 500 || daysSinceRegistration > 180) {
           frequency = 3;
-        } else if (daysSinceRegistration > 60) {
+        } else if (activitiesCount > 250 || daysSinceRegistration > 60) {
           frequency = 4;
         } else if (daysSinceRegistration > 30) {
           frequency = 5;
@@ -503,13 +526,21 @@ export class UserService {
     });
   }
 
-  public async createUser({
-    data
-  }: {
-    data: Prisma.UserCreateInput;
-  }): Promise<User> {
-    if (!data?.provider) {
+  public async createUser(
+    {
+      data
+    }: {
+      data: Prisma.UserCreateInput;
+    } = { data: {} }
+  ): Promise<User> {
+    if (!data.provider) {
       data.provider = 'ANONYMOUS';
+    }
+
+    if (!data.role) {
+      const hasAdmin = await this.hasAdmin();
+
+      data.role = hasAdmin ? 'USER' : 'ADMIN';
     }
 
     const user = await this.prismaService.user.create({

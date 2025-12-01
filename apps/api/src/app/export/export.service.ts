@@ -3,7 +3,11 @@ import { OrderService } from '@ghostfolio/api/app/order/order.service';
 import { environment } from '@ghostfolio/api/environments/environment';
 import { MarketDataService } from '@ghostfolio/api/services/market-data/market-data.service';
 import { TagService } from '@ghostfolio/api/services/tag/tag.service';
-import { Filter, Export } from '@ghostfolio/common/interfaces';
+import {
+  ExportResponse,
+  Filter,
+  UserSettings
+} from '@ghostfolio/common/interfaces';
 
 import { Injectable } from '@nestjs/common';
 import { Platform, Prisma } from '@prisma/client';
@@ -21,14 +25,14 @@ export class ExportService {
   public async export({
     activityIds,
     filters,
-    userCurrency,
-    userId
+    userId,
+    userSettings
   }: {
     activityIds?: string[];
     filters?: Filter[];
-    userCurrency: string;
     userId: string;
-  }): Promise<Export> {
+    userSettings: UserSettings;
+  }): Promise<ExportResponse> {
     const { ACCOUNT: filtersByAccount } = groupBy(filters, ({ type }) => {
       return type;
     });
@@ -36,12 +40,12 @@ export class ExportService {
 
     let { activities } = await this.orderService.getOrders({
       filters,
-      userCurrency,
       userId,
       includeDrafts: true,
       sortColumn: 'date',
       sortDirection: 'asc',
-      withExcludedAccounts: true
+      userCurrency: userSettings?.baseCurrency,
+      withExcludedAccountsAndActivities: true
     });
 
     if (activityIds?.length > 0) {
@@ -141,15 +145,16 @@ export class ExportService {
     );
 
     const tags = (await this.tagService.getTagsForUser(userId))
-      .filter(
-        ({ id, isUsed }) =>
+      .filter(({ id, isUsed }) => {
+        return (
           isUsed &&
           activities.some((activity) => {
             return activity.tags.some(({ id: tagId }) => {
               return tagId === id;
             });
           })
-      )
+        );
+      })
       .map(({ id, name }) => {
         return {
           id,
@@ -243,7 +248,10 @@ export class ExportService {
         }
       ),
       user: {
-        settings: { currency: userCurrency }
+        settings: {
+          currency: userSettings?.baseCurrency,
+          performanceCalculationType: userSettings?.performanceCalculationType
+        }
       }
     };
   }

@@ -1,9 +1,13 @@
-import { CreateOrderDto } from '@ghostfolio/api/app/order/create-order.dto';
-import { UpdateOrderDto } from '@ghostfolio/api/app/order/update-order.dto';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
+import { ASSET_CLASS_MAPPING } from '@ghostfolio/common/config';
+import { CreateOrderDto, UpdateOrderDto } from '@ghostfolio/common/dtos';
 import { getDateFormatString } from '@ghostfolio/common/helper';
-import { LookupItem } from '@ghostfolio/common/interfaces';
+import {
+  AssetClassSelectorOption,
+  LookupItem
+} from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
+import { validateObjectForForm } from '@ghostfolio/common/utils';
 import { GfEntityLogoComponent } from '@ghostfolio/ui/entity-logo';
 import { translate } from '@ghostfolio/ui/i18n';
 import { GfSymbolAutocompleteComponent } from '@ghostfolio/ui/symbol-autocomplete';
@@ -37,7 +41,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { IonIcon } from '@ionic/angular/standalone';
-import { AssetClass, AssetSubClass, Tag, Type } from '@prisma/client';
+import { AssetClass, Tag, Type } from '@prisma/client';
 import { isAfter, isToday } from 'date-fns';
 import { addIcons } from 'ionicons';
 import { calendarClearOutline, refreshOutline } from 'ionicons/icons';
@@ -45,8 +49,8 @@ import { EMPTY, Subject } from 'rxjs';
 import { catchError, delay, takeUntil } from 'rxjs/operators';
 
 import { DataService } from '../../../../services/data.service';
-import { validateObjectForForm } from '../../../../util/form.util';
 import { CreateOrUpdateActivityDialogParams } from './interfaces/interfaces';
+import { ActivityType } from './types/activity-type.type';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,14 +75,18 @@ import { CreateOrUpdateActivityDialogParams } from './interfaces/interfaces';
   styleUrls: ['./create-or-update-activity-dialog.scss'],
   templateUrl: 'create-or-update-activity-dialog.html'
 })
-export class GfCreateOrUpdateActivityDialog implements OnDestroy {
+export class GfCreateOrUpdateActivityDialogComponent implements OnDestroy {
   public activityForm: FormGroup;
-  public assetClasses = Object.keys(AssetClass).map((assetClass) => {
-    return { id: assetClass, label: translate(assetClass) };
-  });
-  public assetSubClasses = Object.keys(AssetSubClass).map((assetSubClass) => {
-    return { id: assetSubClass, label: translate(assetSubClass) };
-  });
+
+  public assetClassOptions: AssetClassSelectorOption[] = Object.keys(AssetClass)
+    .map((id) => {
+      return { id, label: translate(id) } as AssetClassSelectorOption;
+    })
+    .sort((a, b) => {
+      return a.label.localeCompare(b.label);
+    });
+
+  public assetSubClassOptions: AssetClassSelectorOption[] = [];
   public currencies: string[] = [];
   public currencyOfAssetProfile: string;
   public currentMarketPrice = null;
@@ -101,7 +109,7 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
     @Inject(MAT_DIALOG_DATA) public data: CreateOrUpdateActivityDialogParams,
     private dataService: DataService,
     private dateAdapter: DateAdapter<any>,
-    public dialogRef: MatDialogRef<GfCreateOrUpdateActivityDialog>,
+    public dialogRef: MatDialogRef<GfCreateOrUpdateActivityDialogComponent>,
     private formBuilder: FormBuilder,
     @Inject(MAT_DATE_LOCALE) private locale: string,
     private userService: UserService
@@ -170,9 +178,11 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
         };
       }) ?? [];
 
-    Object.keys(Type).forEach((type) => {
-      this.typesTranslationMap[Type[type]] = translate(Type[type]);
-    });
+    for (const type of Object.keys(ActivityType)) {
+      this.typesTranslationMap[ActivityType[type]] = translate(
+        ActivityType[type]
+      );
+    }
 
     this.activityForm = this.formBuilder.group({
       accountId: [
@@ -234,7 +244,9 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
       )
       .subscribe(async () => {
         if (
-          ['BUY', 'FEE', 'ITEM'].includes(this.activityForm.get('type').value)
+          ['BUY', 'FEE', 'VALUABLE'].includes(
+            this.activityForm.get('type').value
+          )
         ) {
           this.total =
             this.activityForm.get('quantity').value *
@@ -253,7 +265,7 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
     this.activityForm.get('accountId').valueChanges.subscribe((accountId) => {
       const type = this.activityForm.get('type').value;
 
-      if (['FEE', 'INTEREST', 'ITEM', 'LIABILITY'].includes(type)) {
+      if (['FEE', 'INTEREST', 'LIABILITY', 'VALUABLE'].includes(type)) {
         const currency =
           this.data.accounts.find(({ id }) => {
             return id === accountId;
@@ -272,6 +284,26 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
         }
       }
     });
+
+    this.activityForm
+      .get('assetClass')
+      .valueChanges.pipe(takeUntil(this.unsubscribeSubject))
+      .subscribe((assetClass) => {
+        const assetSubClasses = ASSET_CLASS_MAPPING.get(assetClass) ?? [];
+
+        this.assetSubClassOptions = assetSubClasses
+          .map((assetSubClass) => {
+            return {
+              id: assetSubClass,
+              label: translate(assetSubClass)
+            };
+          })
+          .sort((a, b) => a.label.localeCompare(b.label));
+
+        this.activityForm.get('assetSubClass').setValue(null);
+
+        this.changeDetectorRef.markForCheck();
+      });
 
     this.activityForm.get('date').valueChanges.subscribe(() => {
       if (isToday(this.activityForm.get('date').value)) {
@@ -329,9 +361,9 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
     this.activityForm
       .get('type')
       .valueChanges.pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe((type: Type) => {
+      .subscribe((type: ActivityType) => {
         if (
-          type === 'ITEM' ||
+          type === 'VALUABLE' ||
           (this.activityForm.get('dataSource').value === 'MANUAL' &&
             type === 'BUY')
         ) {
@@ -356,7 +388,7 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
           this.activityForm.get('name').setValidators(Validators.required);
           this.activityForm.get('name').updateValueAndValidity();
 
-          if (type === 'ITEM') {
+          if (type === 'VALUABLE') {
             this.activityForm.get('quantity').setValue(1);
           }
 
@@ -485,18 +517,26 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
       currency: this.activityForm.get('currency').value,
       customCurrency: this.activityForm.get('currencyOfUnitPrice').value,
       date: this.activityForm.get('date').value,
-      dataSource: this.activityForm.get('dataSource').value,
+      dataSource:
+        this.activityForm.get('type').value === 'VALUABLE'
+          ? 'MANUAL'
+          : this.activityForm.get('dataSource').value,
       fee: this.activityForm.get('fee').value,
       quantity: this.activityForm.get('quantity').value,
       symbol:
-        (['FEE', 'INTEREST', 'ITEM', 'LIABILITY'].includes(
+        (['FEE', 'INTEREST', 'LIABILITY', 'VALUABLE'].includes(
           this.activityForm.get('type').value
         )
           ? undefined
           : this.activityForm.get('searchSymbol')?.value?.symbol) ??
         this.activityForm.get('name')?.value,
-      tags: this.activityForm.get('tags').value,
-      type: this.activityForm.get('type').value,
+      tags: this.activityForm.get('tags').value?.map(({ id }) => {
+        return id;
+      }),
+      type:
+        this.activityForm.get('type').value === 'VALUABLE'
+          ? 'BUY'
+          : this.activityForm.get('type').value,
       unitPrice: this.activityForm.get('unitPrice').value
     };
 
@@ -513,12 +553,6 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
           object: activity
         });
 
-        if (activity.type === 'ITEM') {
-          // Transform deprecated type ITEM
-          activity.dataSource = 'MANUAL';
-          activity.type = 'BUY';
-        }
-
         this.dialogRef.close(activity);
       } else {
         (activity as UpdateOrderDto).id = this.data.activity?.id;
@@ -530,21 +564,11 @@ export class GfCreateOrUpdateActivityDialog implements OnDestroy {
           object: activity as UpdateOrderDto
         });
 
-        if (activity.type === 'ITEM') {
-          // Transform deprecated type ITEM
-          activity.dataSource = 'MANUAL';
-          activity.type = 'BUY';
-        }
-
         this.dialogRef.close(activity as UpdateOrderDto);
       }
     } catch (error) {
       console.error(error);
     }
-  }
-
-  public onTagsChanged(tags: Tag[]) {
-    this.activityForm.get('tags').setValue(tags);
   }
 
   public ngOnDestroy() {

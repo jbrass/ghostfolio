@@ -1,12 +1,12 @@
-import { GfBenchmarkComparatorModule } from '@ghostfolio/client/components/benchmark-comparator/benchmark-comparator.module';
-import { GfInvestmentChartModule } from '@ghostfolio/client/components/investment-chart/investment-chart.module';
+import { GfBenchmarkComparatorComponent } from '@ghostfolio/client/components/benchmark-comparator/benchmark-comparator.component';
+import { GfInvestmentChartComponent } from '@ghostfolio/client/components/investment-chart/investment-chart.component';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { ImpersonationStorageService } from '@ghostfolio/client/services/impersonation-storage.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
 import {
   HistoricalDataItem,
   InvestmentItem,
-  PortfolioInvestments,
+  PortfolioInvestmentsResponse,
   PortfolioPerformance,
   PortfolioPosition,
   ToggleOption,
@@ -32,6 +32,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { RouterModule } from '@angular/router';
 import { IonIcon } from '@ionic/angular/standalone';
 import { SymbolProfile } from '@prisma/client';
 import { addIcons } from 'ionicons';
@@ -45,8 +46,8 @@ import { takeUntil } from 'rxjs/operators';
 
 @Component({
   imports: [
-    GfBenchmarkComparatorModule,
-    GfInvestmentChartModule,
+    GfBenchmarkComparatorComponent,
+    GfInvestmentChartComponent,
     GfPremiumIndicatorComponent,
     GfToggleComponent,
     GfValueComponent,
@@ -55,7 +56,8 @@ import { takeUntil } from 'rxjs/operators';
     MatCardModule,
     MatMenuModule,
     MatProgressSpinnerModule,
-    NgxSkeletonLoaderModule
+    NgxSkeletonLoaderModule,
+    RouterModule
   ],
   selector: 'gf-analysis-page',
   styleUrls: ['./analysis-page.scss'],
@@ -92,7 +94,7 @@ export class GfAnalysisPageComponent implements OnDestroy, OnInit {
   public performanceDataItems: HistoricalDataItem[];
   public performanceDataItemsInPercentage: HistoricalDataItem[];
   public portfolioEvolutionDataLabel = $localize`Investment`;
-  public streaks: PortfolioInvestments['streaks'];
+  public streaks: PortfolioInvestmentsResponse['streaks'];
   public top3: PortfolioPosition[];
   public unitCurrentStreak: string;
   public unitLongestStreak: string;
@@ -342,13 +344,20 @@ export class GfAnalysisPageComponent implements OnDestroy, OnInit {
           'netPerformancePercentWithCurrencyEffect'
         ).reverse();
 
-        this.top3 = holdingsSorted.slice(0, 3);
+        this.top3 = holdingsSorted
+          .filter(
+            ({ netPerformancePercentWithCurrencyEffect }) =>
+              netPerformancePercentWithCurrencyEffect > 0
+          )
+          .slice(0, 3);
 
-        if (holdings?.length > 3) {
-          this.bottom3 = holdingsSorted.slice(-3).reverse();
-        } else {
-          this.bottom3 = [];
-        }
+        this.bottom3 = holdingsSorted
+          .filter(
+            ({ netPerformancePercentWithCurrencyEffect }) =>
+              netPerformancePercentWithCurrencyEffect < 0
+          )
+          .slice(-3)
+          .reverse();
 
         this.changeDetectorRef.markForCheck();
       });

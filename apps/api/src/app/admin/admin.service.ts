@@ -23,19 +23,21 @@ import {
   AdminMarketData,
   AdminMarketDataDetails,
   AdminMarketDataItem,
-  AdminUsers,
+  AdminUserResponse,
+  AdminUsersResponse,
   AssetProfileIdentifier,
   EnhancedSymbolProfile,
   Filter
 } from '@ghostfolio/common/interfaces';
 import { Sector } from '@ghostfolio/common/interfaces/sector.interface';
-import { MarketDataPreset, UserWithSettings } from '@ghostfolio/common/types';
+import { MarketDataPreset } from '@ghostfolio/common/types';
 
 import {
   BadRequestException,
   HttpException,
   Injectable,
-  Logger
+  Logger,
+  NotFoundException
 } from '@nestjs/common';
 import {
   AssetClass,
@@ -133,36 +135,51 @@ export class AdminService {
     }
   }
 
-  public async get({ user }: { user: UserWithSettings }): Promise<AdminData> {
-    const dataSources = await this.dataProviderService.getDataSources({
-      user,
-      includeGhostfolio: true
-    });
+  public async get(): Promise<AdminData> {
+    const dataSources = Object.values(DataSource);
 
-    const [settings, transactionCount, userCount] = await Promise.all([
-      this.propertyService.get(),
-      this.prismaService.order.count(),
-      this.countUsersWithAnalytics()
-    ]);
+    const [enabledDataSources, settings, transactionCount, userCount] =
+      await Promise.all([
+        this.dataProviderService.getDataSources(),
+        this.propertyService.get(),
+        this.prismaService.order.count(),
+        this.countUsersWithAnalytics()
+      ]);
 
-    const dataProviders = await Promise.all(
-      dataSources.map(async (dataSource) => {
-        const dataProviderInfo = this.dataProviderService
-          .getDataProvider(dataSource)
-          .getDataProviderInfo();
+    const dataProviders = (
+      await Promise.all(
+        dataSources.map(async (dataSource) => {
+          const assetProfileCount =
+            await this.prismaService.symbolProfile.count({
+              where: {
+                dataSource
+              }
+            });
 
-        const assetProfileCount = await this.prismaService.symbolProfile.count({
-          where: {
-            dataSource
+          const isEnabled = enabledDataSources.includes(dataSource);
+
+          if (
+            assetProfileCount > 0 ||
+            dataSource === 'GHOSTFOLIO' ||
+            isEnabled
+          ) {
+            const dataProviderInfo = this.dataProviderService
+              .getDataProvider(dataSource)
+              .getDataProviderInfo();
+
+            return {
+              ...dataProviderInfo,
+              assetProfileCount,
+              useForExchangeRates:
+                dataSource ===
+                this.dataProviderService.getDataSourceForExchangeRates()
+            };
           }
-        });
 
-        return {
-          ...dataProviderInfo,
-          assetProfileCount
-        };
-      })
-    );
+          return null;
+        })
+      )
+    ).filter(Boolean);
 
     return {
       dataProviders,
@@ -177,7 +194,7 @@ export class AdminService {
     filters,
     presetId,
     sortColumn,
-    sortDirection,
+    sortDirection = 'asc',
     skip,
     take = Number.MAX_SAFE_INTEGER
   }: {
@@ -214,12 +231,12 @@ export class AdminService {
       return type === 'SEARCH_QUERY';
     })?.id;
 
-    const { ASSET_SUB_CLASS: filtersByAssetSubClass } = groupBy(
-      filters,
-      ({ type }) => {
-        return type;
-      }
-    );
+    const {
+      ASSET_SUB_CLASS: filtersByAssetSubClass,
+      DATA_SOURCE: filtersByDataSource
+    } = groupBy(filters, ({ type }) => {
+      return type;
+    });
 
     const marketDataItems = await this.prismaService.marketData.groupBy({
       _count: true,
@@ -228,6 +245,10 @@ export class AdminService {
 
     if (filtersByAssetSubClass) {
       where.assetSubClass = AssetSubClass[filtersByAssetSubClass[0].id];
+    }
+
+    if (filtersByDataSource) {
+      where.dataSource = DataSource[filtersByDataSource[0].id];
     }
 
     if (searchQuery) {
@@ -243,11 +264,13 @@ export class AdminService {
       orderBy = [{ [sortColumn]: sortDirection }];
 
       if (sortColumn === 'activitiesCount') {
-        orderBy = {
-          activities: {
-            _count: sortDirection
+        orderBy = [
+          {
+            activities: {
+              _count: sortDirection
+            }
           }
-        };
+        ];
       }
     }
 
@@ -256,10 +279,10 @@ export class AdminService {
     try {
       const symbolProfileResult = await Promise.all([
         extendedPrismaClient.symbolProfile.findMany({
-          orderBy,
           skip,
           take,
           where,
+          orderBy: [...orderBy, { id: sortDirection }],
           select: {
             _count: {
               select: {
@@ -486,16 +509,36 @@ export class AdminService {
     };
   }
 
+  public async getUser(id: string): Promise<AdminUserResponse> {
+    const [user] = await this.getUsersWithAnalytics({
+      where: { id }
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    return user;
+  }
+
   public async getUsers({
     skip,
     take = Number.MAX_SAFE_INTEGER
   }: {
     skip?: number;
     take?: number;
-  }): Promise<AdminUsers> {
+  }): Promise<AdminUsersResponse> {
     const [count, users] = await Promise.all([
       this.countUsersWithAnalytics(),
-      this.getUsersWithAnalytics({ skip, take })
+      this.getUsersWithAnalytics({
+        skip,
+        take,
+        where: {
+          NOT: {
+            analytics: null
+          }
+        }
+      })
     ]);
 
     return { count, users };
@@ -793,34 +836,32 @@ export class AdminService {
 
   private async getUsersWithAnalytics({
     skip,
-    take
+    take,
+    where
   }: {
     skip?: number;
     take?: number;
-  }): Promise<AdminUsers['users']> {
-    let orderBy: Prisma.UserOrderByWithRelationInput = {
-      createdAt: 'desc'
-    };
-    let where: Prisma.UserWhereInput;
+    where?: Prisma.UserWhereInput;
+  }): Promise<AdminUsersResponse['users']> {
+    let orderBy: Prisma.Enumerable<Prisma.UserOrderByWithRelationInput> = [
+      { createdAt: 'desc' }
+    ];
 
     if (this.configurationService.get('ENABLE_FEATURE_SUBSCRIPTION')) {
-      orderBy = {
-        analytics: {
-          lastRequestAt: 'desc'
+      orderBy = [
+        {
+          analytics: {
+            lastRequestAt: 'desc'
+          }
         }
-      };
-      where = {
-        NOT: {
-          analytics: null
-        }
-      };
+      ];
     }
 
     const usersWithAnalytics = await this.prismaService.user.findMany({
-      orderBy,
       skip,
       take,
       where,
+      orderBy: [...orderBy, { id: 'desc' }],
       select: {
         _count: {
           select: { accounts: true, activities: true }
@@ -835,6 +876,7 @@ export class AdminService {
         },
         createdAt: true,
         id: true,
+        provider: true,
         role: true,
         subscriptions: {
           orderBy: {
@@ -851,7 +893,7 @@ export class AdminService {
     });
 
     return usersWithAnalytics.map(
-      ({ _count, analytics, createdAt, id, role, subscriptions }) => {
+      ({ _count, analytics, createdAt, id, provider, role, subscriptions }) => {
         const daysSinceRegistration =
           differenceInDays(new Date(), createdAt) + 1;
         const engagement = analytics
@@ -868,6 +910,7 @@ export class AdminService {
           createdAt,
           engagement,
           id,
+          provider,
           role,
           subscription,
           accountCount: _count.accounts || 0,

@@ -1,12 +1,14 @@
-import { Activity } from '@ghostfolio/api/app/order/interfaces/activities.interface';
-import { GfAccountsTableComponent } from '@ghostfolio/client/components/accounts-table/accounts-table.component';
-import { GfDialogFooterModule } from '@ghostfolio/client/components/dialog-footer/dialog-footer.module';
-import { GfDialogHeaderModule } from '@ghostfolio/client/components/dialog-header/dialog-header.module';
 import { DataService } from '@ghostfolio/client/services/data.service';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
-import { NUMERICAL_PRECISION_THRESHOLD } from '@ghostfolio/common/config';
+import {
+  NUMERICAL_PRECISION_THRESHOLD_3_FIGURES,
+  NUMERICAL_PRECISION_THRESHOLD_5_FIGURES,
+  NUMERICAL_PRECISION_THRESHOLD_6_FIGURES
+} from '@ghostfolio/common/config';
+import { CreateOrderDto } from '@ghostfolio/common/dtos';
 import { DATE_FORMAT, downloadAsFile } from '@ghostfolio/common/helper';
 import {
+  Activity,
   DataProviderInfo,
   EnhancedSymbolProfile,
   Filter,
@@ -15,8 +17,11 @@ import {
 } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
 import { internalRoutes } from '@ghostfolio/common/routes/routes';
+import { GfAccountsTableComponent } from '@ghostfolio/ui/accounts-table';
 import { GfActivitiesTableComponent } from '@ghostfolio/ui/activities-table';
 import { GfDataProviderCreditsComponent } from '@ghostfolio/ui/data-provider-credits';
+import { GfDialogFooterComponent } from '@ghostfolio/ui/dialog-footer';
+import { GfDialogHeaderComponent } from '@ghostfolio/ui/dialog-header';
 import { GfHistoricalMarketDataEditorComponent } from '@ghostfolio/ui/historical-market-data-editor';
 import { translate } from '@ghostfolio/ui/i18n';
 import { GfLineChartComponent } from '@ghostfolio/ui/line-chart';
@@ -34,7 +39,7 @@ import {
   OnDestroy,
   OnInit
 } from '@angular/core';
-import { FormBuilder, FormGroup } from '@angular/forms';
+import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
 import {
@@ -53,6 +58,7 @@ import { isUUID } from 'class-validator';
 import { format, isSameMonth, isToday, parseISO } from 'date-fns';
 import { addIcons } from 'ionicons';
 import {
+  arrowDownCircleOutline,
   createOutline,
   flagOutline,
   readerOutline,
@@ -74,8 +80,8 @@ import { HoldingDetailDialogParams } from './interfaces/interfaces';
     GfAccountsTableComponent,
     GfActivitiesTableComponent,
     GfDataProviderCreditsComponent,
-    GfDialogFooterModule,
-    GfDialogHeaderModule,
+    GfDialogFooterComponent,
+    GfDialogHeaderComponent,
     GfHistoricalMarketDataEditorComponent,
     GfLineChartComponent,
     GfPortfolioProportionChartComponent,
@@ -88,6 +94,7 @@ import { HoldingDetailDialogParams } from './interfaces/interfaces';
     MatFormFieldModule,
     MatTabsModule,
     NgxSkeletonLoaderModule,
+    ReactiveFormsModule,
     RouterModule
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
@@ -96,11 +103,12 @@ import { HoldingDetailDialogParams } from './interfaces/interfaces';
   templateUrl: 'holding-detail-dialog.html'
 })
 export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
-  public activityForm: FormGroup;
+  public activitiesCount: number;
   public accounts: Account[];
   public assetClass: string;
   public assetSubClass: string;
   public averagePrice: number;
+  public averagePricePrecision = 2;
   public benchmarkDataItems: LineChartItem[];
   public benchmarkLabel = $localize`Average Unit Price`;
   public countries: {
@@ -116,17 +124,22 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   public hasPermissionToCreateOwnTag: boolean;
   public hasPermissionToReadMarketDataOfOwnAssetProfile: boolean;
   public historicalDataItems: LineChartItem[];
+  public holdingForm: FormGroup;
   public investmentInBaseCurrencyWithCurrencyEffect: number;
   public investmentInBaseCurrencyWithCurrencyEffectPrecision = 2;
   public isUUID = isUUID;
   public marketDataItems: MarketData[] = [];
   public marketPrice: number;
   public marketPriceMax: number;
+  public marketPriceMaxPrecision = 2;
   public marketPriceMin: number;
+  public marketPriceMinPrecision = 2;
+  public marketPricePrecision = 2;
   public netPerformance: number;
   public netPerformancePrecision = 2;
   public netPerformancePercent: number;
   public netPerformancePercentWithCurrencyEffect: number;
+  public netPerformancePercentWithCurrencyEffectPrecision = 2;
   public netPerformanceWithCurrencyEffect: number;
   public netPerformanceWithCurrencyEffectPrecision = 2;
   public quantity: number;
@@ -142,8 +155,6 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   public SymbolProfile: EnhancedSymbolProfile;
   public tags: Tag[];
   public tagsAvailable: Tag[];
-  public totalItems: number;
-  public transactionCount: number;
   public user: User;
   public value: number;
 
@@ -159,6 +170,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
     private userService: UserService
   ) {
     addIcons({
+      arrowDownCircleOutline,
       createOutline,
       flagOutline,
       readerOutline,
@@ -169,16 +181,16 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   }
 
   public ngOnInit() {
-    this.activityForm = this.formBuilder.group({
-      tags: [] as string[]
-    });
-
     const filters: Filter[] = [
       { id: this.data.dataSource, type: 'DATA_SOURCE' },
       { id: this.data.symbol, type: 'SYMBOL' }
     ];
 
-    this.activityForm
+    this.holdingForm = this.formBuilder.group({
+      tags: [] as string[]
+    });
+
+    this.holdingForm
       .get('tags')
       .valueChanges.pipe(takeUntil(this.unsubscribeSubject))
       .subscribe((tags: Tag[]) => {
@@ -252,6 +264,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe(
         ({
+          activitiesCount,
           averagePrice,
           dataProviderInfo,
           dividendInBaseCurrency,
@@ -270,10 +283,18 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
           quantity,
           SymbolProfile,
           tags,
-          transactionCount,
           value
         }) => {
+          this.activitiesCount = activitiesCount;
           this.averagePrice = averagePrice;
+
+          if (
+            this.averagePrice >= NUMERICAL_PRECISION_THRESHOLD_6_FIGURES &&
+            this.data.deviceType === 'mobile'
+          ) {
+            this.averagePricePrecision = 0;
+          }
+
           this.benchmarkDataItems = [];
           this.countries = {};
           this.dataProviderInfo = dataProviderInfo;
@@ -281,7 +302,8 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
 
           if (
             this.data.deviceType === 'mobile' &&
-            this.dividendInBaseCurrency >= NUMERICAL_PRECISION_THRESHOLD
+            this.dividendInBaseCurrency >=
+              NUMERICAL_PRECISION_THRESHOLD_6_FIGURES
           ) {
             this.dividendInBaseCurrencyPrecision = 0;
           }
@@ -320,19 +342,42 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
           if (
             this.data.deviceType === 'mobile' &&
             this.investmentInBaseCurrencyWithCurrencyEffect >=
-              NUMERICAL_PRECISION_THRESHOLD
+              NUMERICAL_PRECISION_THRESHOLD_6_FIGURES
           ) {
             this.investmentInBaseCurrencyWithCurrencyEffectPrecision = 0;
           }
 
           this.marketPrice = marketPrice;
           this.marketPriceMax = marketPriceMax;
+
+          if (
+            this.data.deviceType === 'mobile' &&
+            this.marketPriceMax >= NUMERICAL_PRECISION_THRESHOLD_6_FIGURES
+          ) {
+            this.marketPriceMaxPrecision = 0;
+          }
+
           this.marketPriceMin = marketPriceMin;
+
+          if (
+            this.data.deviceType === 'mobile' &&
+            this.marketPriceMin >= NUMERICAL_PRECISION_THRESHOLD_6_FIGURES
+          ) {
+            this.marketPriceMinPrecision = 0;
+          }
+
+          if (
+            this.data.deviceType === 'mobile' &&
+            this.marketPrice >= NUMERICAL_PRECISION_THRESHOLD_6_FIGURES
+          ) {
+            this.marketPricePrecision = 0;
+          }
+
           this.netPerformance = netPerformance;
 
           if (
             this.data.deviceType === 'mobile' &&
-            this.netPerformance >= NUMERICAL_PRECISION_THRESHOLD
+            this.netPerformance >= NUMERICAL_PRECISION_THRESHOLD_6_FIGURES
           ) {
             this.netPerformancePrecision = 0;
           }
@@ -342,13 +387,21 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
           this.netPerformancePercentWithCurrencyEffect =
             netPerformancePercentWithCurrencyEffect;
 
+          if (
+            this.data.deviceType === 'mobile' &&
+            this.netPerformancePercentWithCurrencyEffect >=
+              NUMERICAL_PRECISION_THRESHOLD_3_FIGURES
+          ) {
+            this.netPerformancePercentWithCurrencyEffectPrecision = 0;
+          }
+
           this.netPerformanceWithCurrencyEffect =
             netPerformanceWithCurrencyEffect;
 
           if (
             this.data.deviceType === 'mobile' &&
             this.netPerformanceWithCurrencyEffect >=
-              NUMERICAL_PRECISION_THRESHOLD
+              NUMERICAL_PRECISION_THRESHOLD_5_FIGURES
           ) {
             this.netPerformanceWithCurrencyEffectPrecision = 0;
           }
@@ -378,10 +431,8 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
             };
           });
 
-          this.activityForm.setValue({ tags: this.tags }, { emitEvent: false });
+          this.holdingForm.setValue({ tags: this.tags }, { emitEvent: false });
 
-          this.transactionCount = transactionCount;
-          this.totalItems = transactionCount;
           this.value = value;
 
           if (SymbolProfile?.assetClass) {
@@ -510,6 +561,37 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
     this.dialogRef.close();
   }
 
+  public onCloseHolding() {
+    const today = new Date();
+
+    const activity: CreateOrderDto = {
+      accountId: this.accounts.length === 1 ? this.accounts[0].id : null,
+      comment: null,
+      currency: this.SymbolProfile.currency,
+      dataSource: this.SymbolProfile.dataSource,
+      date: today.toISOString(),
+      fee: 0,
+      quantity: this.quantity,
+      symbol: this.SymbolProfile.symbol,
+      tags: this.tags.map(({ id }) => {
+        return id;
+      }),
+      type: 'SELL',
+      unitPrice: this.marketPrice
+    };
+
+    this.dataService
+      .postOrder(activity)
+      .pipe(takeUntil(this.unsubscribeSubject))
+      .subscribe(() => {
+        this.router.navigate(
+          internalRoutes.portfolio.subRoutes.activities.routerLink
+        );
+
+        this.dialogRef.close();
+      });
+  }
+
   public onExport() {
     const activityIds = this.dataSource.data.map(({ id }) => {
       return id;
@@ -534,10 +616,6 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
     if (withRefresh) {
       this.fetchMarketData();
     }
-  }
-
-  public onTagsChanged(tags: Tag[]) {
-    this.activityForm.get('tags').setValue(tags);
   }
 
   public onUpdateActivity(aActivity: Activity) {

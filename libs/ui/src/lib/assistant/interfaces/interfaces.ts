@@ -1,32 +1,40 @@
 import { AssetProfileIdentifier } from '@ghostfolio/common/interfaces';
-import { DateRange } from '@ghostfolio/common/types';
+import { AccountWithValue, DateRange } from '@ghostfolio/common/types';
 
 import { SearchMode } from '../enums/search-mode';
 
-export interface IAssetSearchResultItem extends AssetProfileIdentifier {
+export interface AccountSearchResultItem
+  extends Pick<AccountWithValue, 'id' | 'name'> {
+  mode: SearchMode.ACCOUNT;
+  routerLink: string[];
+}
+
+export interface AssetSearchResultItem extends AssetProfileIdentifier {
   assetSubClassString: string;
   currency: string;
   mode: SearchMode.ASSET_PROFILE | SearchMode.HOLDING;
   name: string;
 }
 
-export interface IDateRangeOption {
+export interface DateRangeOption {
   label: string;
   value: DateRange;
 }
 
-export interface IQuickLinkSearchResultItem {
+export interface QuickLinkSearchResultItem {
   mode: SearchMode.QUICK_LINK;
   name: string;
   routerLink: string[];
 }
 
-export type ISearchResultItem =
-  | IAssetSearchResultItem
-  | IQuickLinkSearchResultItem;
+export type SearchResultItem =
+  | AccountSearchResultItem
+  | AssetSearchResultItem
+  | QuickLinkSearchResultItem;
 
-export interface ISearchResults {
-  assetProfiles: ISearchResultItem[];
-  holdings: ISearchResultItem[];
-  quickLinks: ISearchResultItem[];
+export interface SearchResults {
+  accounts: SearchResultItem[];
+  assetProfiles: SearchResultItem[];
+  holdings: SearchResultItem[];
+  quickLinks: SearchResultItem[];
 }

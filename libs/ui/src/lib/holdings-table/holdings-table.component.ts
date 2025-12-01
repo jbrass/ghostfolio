@@ -1,4 +1,3 @@
-import { GfSymbolModule } from '@ghostfolio/client/pipes/symbol/symbol.module';
 import { getLocale } from '@ghostfolio/common/helper';
 import {
   AssetProfileIdentifier,
@@ -34,7 +33,6 @@ import { GfValueComponent } from '../value/value.component';
   imports: [
     CommonModule,
     GfEntityLogoComponent,
-    GfSymbolModule,
     GfValueComponent,
     MatButtonModule,
     MatDialogModule,
@@ -52,6 +50,7 @@ export class GfHoldingsTableComponent implements OnChanges, OnDestroy {
   @Input() baseCurrency: string;
   @Input() deviceType: string;
   @Input() hasPermissionToOpenDetails = true;
+  @Input() hasPermissionToShowQuantities = true;
   @Input() hasPermissionToShowValues = true;
   @Input() holdings: PortfolioPosition[];
   @Input() locale = getLocale();
@@ -72,6 +71,10 @@ export class GfHoldingsTableComponent implements OnChanges, OnDestroy {
 
   public ngOnChanges() {
     this.displayedColumns = ['icon', 'nameWithSymbol', 'dateOfFirstActivity'];
+
+    if (this.hasPermissionToShowQuantities) {
+      this.displayedColumns.push('quantity');
+    }
 
     if (this.hasPermissionToShowValues) {
       this.displayedColumns.push('valueInBaseCurrency');

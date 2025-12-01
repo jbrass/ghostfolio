@@ -7,7 +7,6 @@ import {
   User
 } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
-import { BenchmarkTrend } from '@ghostfolio/common/types';
 import { GfBenchmarkComponent } from '@ghostfolio/ui/benchmark';
 import { GfPremiumIndicatorComponent } from '@ghostfolio/ui/premium-indicator';
 
@@ -29,7 +28,7 @@ import { DeviceDetectorService } from 'ngx-device-detector';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
-import { CreateWatchlistItemDialogComponent } from './create-watchlist-item-dialog/create-watchlist-item-dialog.component';
+import { GfCreateWatchlistItemDialogComponent } from './create-watchlist-item-dialog/create-watchlist-item-dialog.component';
 import { CreateWatchlistItemDialogParams } from './create-watchlist-item-dialog/interfaces/interfaces';
 
 @Component({
@@ -46,7 +45,7 @@ import { CreateWatchlistItemDialogParams } from './create-watchlist-item-dialog/
   styleUrls: ['./home-watchlist.scss'],
   templateUrl: './home-watchlist.html'
 })
-export class HomeWatchlistComponent implements OnDestroy, OnInit {
+export class GfHomeWatchlistComponent implements OnDestroy, OnInit {
   public deviceType: string;
   public hasImpersonationId: boolean;
   public hasPermissionToCreateWatchlistItem: boolean;
@@ -137,17 +136,7 @@ export class HomeWatchlistComponent implements OnDestroy, OnInit {
       .fetchWatchlist()
       .pipe(takeUntil(this.unsubscribeSubject))
       .subscribe(({ watchlist }) => {
-        this.watchlist = watchlist.map(
-          ({ dataSource, marketCondition, name, performances, symbol }) => ({
-            dataSource,
-            marketCondition,
-            name,
-            performances,
-            symbol,
-            trend50d: 'UNKNOWN' as BenchmarkTrend,
-            trend200d: 'UNKNOWN' as BenchmarkTrend
-          })
-        );
+        this.watchlist = watchlist;
 
         this.changeDetectorRef.markForCheck();
       });
@@ -160,12 +149,15 @@ export class HomeWatchlistComponent implements OnDestroy, OnInit {
       .subscribe((user) => {
         this.user = user;
 
-        const dialogRef = this.dialog.open(CreateWatchlistItemDialogComponent, {
+        const dialogRef = this.dialog.open<
+          GfCreateWatchlistItemDialogComponent,
+          CreateWatchlistItemDialogParams
+        >(GfCreateWatchlistItemDialogComponent, {
           autoFocus: false,
           data: {
             deviceType: this.deviceType,
             locale: this.user?.settings?.locale
-          } as CreateWatchlistItemDialogParams,
+          },
           width: this.deviceType === 'mobile' ? '100vw' : '50rem'
         });
 

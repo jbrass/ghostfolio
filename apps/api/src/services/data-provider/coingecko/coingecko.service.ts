@@ -7,14 +7,12 @@ import {
   GetQuotesParams,
   GetSearchParams
 } from '@ghostfolio/api/services/data-provider/interfaces/data-provider.interface';
-import {
-  IDataProviderHistoricalResponse,
-  IDataProviderResponse
-} from '@ghostfolio/api/services/interfaces/interfaces';
 import { DEFAULT_CURRENCY } from '@ghostfolio/common/config';
 import { DATE_FORMAT } from '@ghostfolio/common/helper';
 import {
+  DataProviderHistoricalResponse,
   DataProviderInfo,
+  DataProviderResponse,
   LookupItem,
   LookupResponse
 } from '@ghostfolio/common/interfaces';
@@ -78,7 +76,7 @@ export class CoinGeckoService implements DataProviderInterface {
     } catch (error) {
       let message = error;
 
-      if (error?.name === 'AbortError') {
+      if (['AbortError', 'TimeoutError'].includes(error?.name)) {
         message = `RequestError: The operation to get the asset profile for ${symbol} was aborted because the request to the data provider took more than ${(
           this.configurationService.get('REQUEST_TIMEOUT') / 1000
         ).toFixed(3)} seconds`;
@@ -109,15 +107,17 @@ export class CoinGeckoService implements DataProviderInterface {
     symbol,
     to
   }: GetHistoricalParams): Promise<{
-    [symbol: string]: { [date: string]: IDataProviderHistoricalResponse };
+    [symbol: string]: { [date: string]: DataProviderHistoricalResponse };
   }> {
     try {
+      const queryParams = new URLSearchParams({
+        from: getUnixTime(from).toString(),
+        to: getUnixTime(to).toString(),
+        vs_currency: DEFAULT_CURRENCY.toLowerCase()
+      });
+
       const { error, prices, status } = await fetch(
-        `${
-          this.apiUrl
-        }/coins/${symbol}/market_chart/range?vs_currency=${DEFAULT_CURRENCY.toLowerCase()}&from=${getUnixTime(
-          from
-        )}&to=${getUnixTime(to)}`,
+        `${this.apiUrl}/coins/${symbol}/market_chart/range?${queryParams.toString()}`,
         {
           headers: this.headers,
           signal: AbortSignal.timeout(requestTimeout)
@@ -133,7 +133,7 @@ export class CoinGeckoService implements DataProviderInterface {
       }
 
       const result: {
-        [symbol: string]: { [date: string]: IDataProviderHistoricalResponse };
+        [symbol: string]: { [date: string]: DataProviderHistoricalResponse };
       } = {
         [symbol]: {}
       };
@@ -166,18 +166,21 @@ export class CoinGeckoService implements DataProviderInterface {
   public async getQuotes({
     requestTimeout = this.configurationService.get('REQUEST_TIMEOUT'),
     symbols
-  }: GetQuotesParams): Promise<{ [symbol: string]: IDataProviderResponse }> {
-    const response: { [symbol: string]: IDataProviderResponse } = {};
+  }: GetQuotesParams): Promise<{ [symbol: string]: DataProviderResponse }> {
+    const response: { [symbol: string]: DataProviderResponse } = {};
 
     if (symbols.length <= 0) {
       return response;
     }
 
     try {
+      const queryParams = new URLSearchParams({
+        ids: symbols.join(','),
+        vs_currencies: DEFAULT_CURRENCY.toLowerCase()
+      });
+
       const quotes = await fetch(
-        `${this.apiUrl}/simple/price?ids=${symbols.join(
-          ','
-        )}&vs_currencies=${DEFAULT_CURRENCY.toLowerCase()}`,
+        `${this.apiUrl}/simple/price?${queryParams.toString()}`,
         {
           headers: this.headers,
           signal: AbortSignal.timeout(requestTimeout)
@@ -196,8 +199,10 @@ export class CoinGeckoService implements DataProviderInterface {
     } catch (error) {
       let message = error;
 
-      if (error?.name === 'AbortError') {
-        message = `RequestError: The operation to get the quotes was aborted because the request to the data provider took more than ${(
+      if (['AbortError', 'TimeoutError'].includes(error?.name)) {
+        message = `RequestError: The operation to get the quotes for ${symbols.join(
+          ', '
+        )} was aborted because the request to the data provider took more than ${(
           this.configurationService.get('REQUEST_TIMEOUT') / 1000
         ).toFixed(3)} seconds`;
       }
@@ -212,16 +217,24 @@ export class CoinGeckoService implements DataProviderInterface {
     return 'bitcoin';
   }
 
-  public async search({ query }: GetSearchParams): Promise<LookupResponse> {
+  public async search({
+    query,
+    requestTimeout = this.configurationService.get('REQUEST_TIMEOUT')
+  }: GetSearchParams): Promise<LookupResponse> {
     let items: LookupItem[] = [];
 
     try {
-      const { coins } = await fetch(`${this.apiUrl}/search?query=${query}`, {
-        headers: this.headers,
-        signal: AbortSignal.timeout(
-          this.configurationService.get('REQUEST_TIMEOUT')
-        )
-      }).then((res) => res.json());
+      const queryParams = new URLSearchParams({
+        query
+      });
+
+      const { coins } = await fetch(
+        `${this.apiUrl}/search?${queryParams.toString()}`,
+        {
+          headers: this.headers,
+          signal: AbortSignal.timeout(requestTimeout)
+        }
+      ).then((res) => res.json());
 
       items = coins.map(({ id: symbol, name }) => {
         return {
@@ -237,7 +250,7 @@ export class CoinGeckoService implements DataProviderInterface {
     } catch (error) {
       let message = error;
 
-      if (error?.name === 'AbortError') {
+      if (['AbortError', 'TimeoutError'].includes(error?.name)) {
         message = `RequestError: The operation to search for ${query} was aborted because the request to the data provider took more than ${(
           this.configurationService.get('REQUEST_TIMEOUT') / 1000
         ).toFixed(3)} seconds`;

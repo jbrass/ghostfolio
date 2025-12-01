@@ -8,16 +8,14 @@ import {
   GetSearchParams
 } from '@ghostfolio/api/services/data-provider/interfaces/data-provider.interface';
 import {
-  IDataProviderHistoricalResponse,
-  IDataProviderResponse
-} from '@ghostfolio/api/services/interfaces/interfaces';
-import {
   ghostfolioFearAndGreedIndexSymbol,
   ghostfolioFearAndGreedIndexSymbolStocks
 } from '@ghostfolio/common/config';
 import { DATE_FORMAT, getYesterday } from '@ghostfolio/common/helper';
 import {
+  DataProviderHistoricalResponse,
   DataProviderInfo,
+  DataProviderResponse,
   LookupResponse
 } from '@ghostfolio/common/interfaces';
 
@@ -35,13 +33,10 @@ export class RapidApiService implements DataProviderInterface {
     return !!this.configurationService.get('API_KEY_RAPID_API');
   }
 
-  public async getAssetProfile({
-    symbol
-  }: GetAssetProfileParams): Promise<Partial<SymbolProfile>> {
-    return {
-      symbol,
-      dataSource: this.getName()
-    };
+  public async getAssetProfile({}: GetAssetProfileParams): Promise<
+    Partial<SymbolProfile>
+  > {
+    return undefined;
   }
 
   public getDataProviderInfo(): DataProviderInfo {
@@ -62,7 +57,7 @@ export class RapidApiService implements DataProviderInterface {
     symbol,
     to
   }: GetHistoricalParams): Promise<{
-    [symbol: string]: { [date: string]: IDataProviderHistoricalResponse };
+    [symbol: string]: { [date: string]: DataProviderHistoricalResponse };
   }> {
     try {
       if (
@@ -99,7 +94,7 @@ export class RapidApiService implements DataProviderInterface {
 
   public async getQuotes({
     symbols
-  }: GetQuotesParams): Promise<{ [symbol: string]: IDataProviderResponse }> {
+  }: GetQuotesParams): Promise<{ [symbol: string]: DataProviderResponse }> {
     if (symbols.length <= 0) {
       return {};
     }
@@ -165,7 +160,7 @@ export class RapidApiService implements DataProviderInterface {
     } catch (error) {
       let message = error;
 
-      if (error?.name === 'AbortError') {
+      if (['AbortError', 'TimeoutError'].includes(error?.name)) {
         message = `RequestError: The operation was aborted because the request to the data provider took more than ${(
           this.configurationService.get('REQUEST_TIMEOUT') / 1000
         ).toFixed(3)} seconds`;

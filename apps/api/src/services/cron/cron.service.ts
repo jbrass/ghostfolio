@@ -17,6 +17,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class CronService {
+  private static readonly EVERY_HOUR_AT_RANDOM_MINUTE = `${new Date().getMinutes()} * * * *`;
   private static readonly EVERY_SUNDAY_AT_LUNCH_TIME = '0 12 * * 0';
 
   public constructor(
@@ -28,8 +29,8 @@ export class CronService {
     private readonly userService: UserService
   ) {}
 
-  @Cron(CronExpression.EVERY_HOUR)
-  public async runEveryHour() {
+  @Cron(CronService.EVERY_HOUR_AT_RANDOM_MINUTE)
+  public async runEveryHourAtRandomMinute() {
     if (await this.isDataGatheringEnabled()) {
       await this.dataGatheringService.gather7Days();
     }
@@ -58,7 +59,9 @@ export class CronService {
   public async runEverySundayAtTwelvePm() {
     if (await this.isDataGatheringEnabled()) {
       const assetProfileIdentifiers =
-        await this.dataGatheringService.getAllActiveAssetProfileIdentifiers();
+        await this.dataGatheringService.getActiveAssetProfileIdentifiers({
+          maxAge: '60 days'
+        });
 
       await this.dataGatheringService.addJobsToQueue(
         assetProfileIdentifiers.map(({ dataSource, symbol }) => {

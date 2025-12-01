@@ -1,4 +1,5 @@
 import { AccountService } from '@ghostfolio/api/app/account/account.service';
+import { AssetProfileChangedEvent } from '@ghostfolio/api/events/asset-profile-changed.event';
 import { PortfolioChangedEvent } from '@ghostfolio/api/events/portfolio-changed.event';
 import { LogPerformance } from '@ghostfolio/api/interceptors/performance-logging/performance-logging.interceptor';
 import { ExchangeRateDataService } from '@ghostfolio/api/services/exchange-rate-data/exchange-rate-data.service';
@@ -9,10 +10,12 @@ import {
   DATA_GATHERING_QUEUE_PRIORITY_HIGH,
   GATHER_ASSET_PROFILE_PROCESS_JOB_NAME,
   GATHER_ASSET_PROFILE_PROCESS_JOB_OPTIONS,
-  ghostfolioPrefix
+  ghostfolioPrefix,
+  TAG_ID_EXCLUDE_FROM_ANALYSIS
 } from '@ghostfolio/common/config';
 import { getAssetProfileIdentifier } from '@ghostfolio/common/helper';
 import {
+  ActivitiesResponse,
   AssetProfileIdentifier,
   EnhancedSymbolProfile,
   Filter
@@ -34,9 +37,7 @@ import { Big } from 'big.js';
 import { isUUID } from 'class-validator';
 import { endOfToday, isAfter } from 'date-fns';
 import { groupBy, uniqBy } from 'lodash';
-import { v4 as uuidv4 } from 'uuid';
-
-import { Activities } from './interfaces/activities.interface';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class OrderService {
@@ -96,7 +97,7 @@ export class OrderService {
       assetSubClass?: AssetSubClass;
       currency?: string;
       symbol?: string;
-      tags?: Tag[];
+      tags?: { id: string }[];
       updateAccountBalance?: boolean;
       userId: string;
     }
@@ -128,7 +129,7 @@ export class OrderService {
       const assetSubClass = data.assetSubClass;
       const dataSource: DataSource = 'MANUAL';
 
-      let name: string;
+      let name = data.SymbolProfile.connectOrCreate.create.name;
       let symbol: string;
 
       if (
@@ -141,8 +142,8 @@ export class OrderService {
         symbol = data.SymbolProfile.connectOrCreate.create.symbol;
       } else {
         // Create custom asset profile
-        name = data.SymbolProfile.connectOrCreate.create.symbol;
-        symbol = uuidv4();
+        name = name ?? data.SymbolProfile.connectOrCreate.create.symbol;
+        symbol = randomUUID();
       }
 
       data.SymbolProfile.connectOrCreate.create.assetClass = assetClass;
@@ -200,9 +201,7 @@ export class OrderService {
         account,
         isDraft,
         tags: {
-          connect: tags.map(({ id }) => {
-            return { id };
-          })
+          connect: tags
         }
       },
       include: { SymbolProfile: true }
@@ -226,6 +225,15 @@ export class OrderService {
         date: data.date as Date
       });
     }
+
+    this.eventEmitter.emit(
+      AssetProfileChangedEvent.getName(),
+      new AssetProfileChangedEvent({
+        currency: order.SymbolProfile.currency,
+        dataSource: order.SymbolProfile.dataSource,
+        symbol: order.SymbolProfile.symbol
+      })
+    );
 
     this.eventEmitter.emit(
       PortfolioChangedEvent.getName(),
@@ -275,7 +283,7 @@ export class OrderService {
       userId,
       includeDrafts: true,
       userCurrency: undefined,
-      withExcludedAccounts: true
+      withExcludedAccountsAndActivities: true
     });
 
     const { count } = await this.prismaService.order.deleteMany({
@@ -326,13 +334,13 @@ export class OrderService {
     includeDrafts = false,
     skip,
     sortColumn,
-    sortDirection,
+    sortDirection = 'asc',
     startDate,
     take = Number.MAX_SAFE_INTEGER,
     types,
     userCurrency,
     userId,
-    withExcludedAccounts = false
+    withExcludedAccountsAndActivities = false
   }: {
     endDate?: Date;
     filters?: Filter[];
@@ -345,12 +353,12 @@ export class OrderService {
     types?: ActivityType[];
     userCurrency: string;
     userId: string;
-    withExcludedAccounts?: boolean;
-  }): Promise<Activities> {
+    withExcludedAccountsAndActivities?: boolean;
+  }): Promise<ActivitiesResponse> {
     let orderBy: Prisma.Enumerable<Prisma.OrderOrderByWithRelationInput> = [
-      { date: 'asc' },
-      { id: 'asc' }
+      { date: 'asc' }
     ];
+
     const where: Prisma.OrderWhereInput = { userId };
 
     if (endDate || startDate) {
@@ -484,23 +492,29 @@ export class OrderService {
     }
 
     if (sortColumn) {
-      orderBy = [{ [sortColumn]: sortDirection }, { id: sortDirection }];
+      orderBy = [{ [sortColumn]: sortDirection }];
     }
 
     if (types) {
       where.type = { in: types };
     }
 
-    if (withExcludedAccounts === false) {
+    if (withExcludedAccountsAndActivities === false) {
       where.OR = [
         { account: null },
         { account: { NOT: { isExcluded: true } } }
       ];
+
+      where.tags = {
+        ...where.tags,
+        none: {
+          id: TAG_ID_EXCLUDE_FROM_ANALYSIS
+        }
+      };
     }
 
     const [orders, count] = await Promise.all([
       this.orders({
-        orderBy,
         skip,
         take,
         where,
@@ -513,7 +527,8 @@ export class OrderService {
           // eslint-disable-next-line @typescript-eslint/naming-convention
           SymbolProfile: true,
           tags: true
-        }
+        },
+        orderBy: [...orderBy, { id: sortDirection }]
       }),
       this.prismaService.order.count({ where })
     ]);
@@ -609,7 +624,7 @@ export class OrderService {
       filters,
       userCurrency,
       userId,
-      withExcludedAccounts: false // TODO
+      withExcludedAccountsAndActivities: false // TODO
     });
   }
 
@@ -650,7 +665,7 @@ export class OrderService {
       assetSubClass?: AssetSubClass;
       currency?: string;
       symbol?: string;
-      tags?: Tag[];
+      tags?: { id: string }[];
       type?: ActivityType;
     };
     where: Prisma.OrderWhereUniqueInput;
@@ -712,9 +727,7 @@ export class OrderService {
         ...data,
         isDraft,
         tags: {
-          connect: tags.map(({ id }) => {
-            return { id };
-          })
+          connect: tags
         }
       }
     });
